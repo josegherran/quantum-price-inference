@@ -3,6 +3,7 @@
 ## Project Overview
 
 Quantum price inference simulation system. Two delivery interfaces:
+
 - **Jupyter Notebook** — researcher-facing demo for a 90-min workshop ([Quantum_Workshop_Facilitator_Script.md](Quantum_Workshop_Facilitator_Script.md))
 - **REST API** — FastAPI service wrapping the same simulation logic
 
@@ -10,7 +11,7 @@ See [README.md](README.md) for architecture, dependency table, and run commands.
 
 ## Architecture
 
-```
+```file stucture
 quantum_price_inference/   # core library (pure Python, no side effects)
 │  composer.py             # IBM Quantum Composer export utilities (implemented)
 │  uncertainty.py          # uncertainty model (TODO)
@@ -26,6 +27,7 @@ api/                       # FastAPI app (TODO)
 ```
 
 ### 4-block model (every simulation follows this)
+
 1. **Uncertainty Model** — what is uncertain (demand, cost, usage); use `qiskit-finance` `NormalDistribution` / `LogNormalDistribution`
 2. **Payoff Function** — business value mapping; use `qiskit-finance` `LinearAmplitudeFunction`
 3. **Encoding** — probability distributions loaded into quantum circuit

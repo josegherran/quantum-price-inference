@@ -19,7 +19,7 @@ $$
 This system implements two estimation paths side-by-side:
 
 | Approach | Method | Notes |
-|---|---|---|
+| --- | --- | --- |
 | Classical | Monte Carlo simulation | Error $\propto \mathcal{O}(1/\sqrt{N})$ |
 | Quantum | Amplitude Estimation (QAE) | Error $\propto \mathcal{O}(1/N)$ — quadratic speedup |
 
@@ -51,7 +51,7 @@ See [Quantum_Workshop_Facilitator_Script.md](Quantum_Workshop_Facilitator_Script
 All other dependencies are declared in [pyproject.toml](pyproject.toml):
 
 | Package | Purpose |
-|---|---|
+| --- | --- |
 | `qiskit` | quantum circuit construction and simulation |
 | `qiskit-algorithms` | amplitude estimation (QAE) |
 | `numpy` | classical Monte Carlo and numerical computation |
