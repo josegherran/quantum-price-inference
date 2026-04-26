@@ -9,19 +9,19 @@ A quantum price inference simulation system that uses quantum algorithms for inf
 
 Pricing a product or service is fundamentally a **probability problem**. Instead of computing a fixed number, we estimate an expected value over uncertain outcomes:
 
-```
-Fair Price = E[g(X)]
-```
+$$
+\text{Fair Price} = \mathbb{E}[g(X)]
+$$
 
-- `X` — uncertain input (demand, cost, usage, FX, incidents)
-- `g(X)` — business payoff (revenue, margin, penalty, benefit)
+- $X$ — uncertain input (demand, cost, usage, FX, incidents)
+- $g(X)$ — business payoff (revenue, margin, penalty, benefit)
 
 This system implements two estimation paths side-by-side:
 
 | Approach | Method | Notes |
 |---|---|---|
-| Classical | Monte Carlo simulation | Accuracy improves as O(1/√N) |
-| Quantum | Amplitude Estimation (QAE) | Extracts expected value directly from quantum state |
+| Classical | Monte Carlo simulation | Error $\propto \mathcal{O}(1/\sqrt{N})$ |
+| Quantum | Amplitude Estimation (QAE) | Error $\propto \mathcal{O}(1/N)$ — quadratic speedup |
 
 Both paths share the same **4-block model**:
 
@@ -67,7 +67,10 @@ Circuits can be visualized locally (via Matplotlib) or interactively in **IBM Qu
 
 ```python
 from qiskit import QuantumCircuit
+from quantum_price_inference import configure_logging
 from quantum_price_inference.composer import open_in_composer, composer_url
+
+configure_logging(level="INFO")  # once at startup
 
 qc = QuantumCircuit(2)
 qc.h(0)
@@ -79,6 +82,12 @@ open_in_composer(qc)
 # or just get the URL (useful in notebooks / CI)
 url = composer_url(qc)
 print(url)
+
+# async variant — safe inside FastAPI handlers or async notebook cells
+import asyncio
+from quantum_price_inference import open_in_composer_async
+await open_in_composer_async(qc)  # notebook
+# asyncio.run(open_in_composer_async(qc))  # script
 ```
 
 The utility exports the circuit to **OpenQASM 2.0** and encodes it as a `?code=` query parameter in the Composer URL. No upload, no credentials.
@@ -131,11 +140,11 @@ uv run uvicorn api.main:app --reload
 
 API available at `http://localhost:8000`. Interactive docs at `http://localhost:8000/docs`.
 
-## License and documentation in this repository are licensed under the MIT License. See [LICENSE](LICENSE) for details.
+### License
 
-License is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+License and documentation in this repository are licensed under the MIT License. See [LICENSE](LICENSE) for details.
 
-## Author
+### Author
 
 @ 2026
 Jose Giori Herran Escobar -  [GitHub](https://github.com/josegherran) - [LinkedIn](https://www.linkedin.com/in/joseherran/)
