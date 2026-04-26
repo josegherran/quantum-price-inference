@@ -1,0 +1,39 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["quantum_price_inference"]
+
+[project]
+name = "quantum-price-inference"
+version = "0.1.0"
+description = "Quantum price inference simulation using amplitude estimation and quantum Monte Carlo methods"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+dependencies = [
+    "qiskit>=1.0",
+    "qiskit-algorithms>=0.3",
+    "numpy>=1.26",
+    "matplotlib>=3.8",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+]
+
+[project.optional-dependencies]
+notebook = [
+    "jupyter>=1.0",
+    "ipykernel>=6.0",
+    "pylatexenc>=2.10",       # circuit drawing with Qiskit
+    "qiskit-finance>=0.4",   # pre-built distribution loading and payoff circuits
+]
+dev = [
+    "pytest>=8.0",
+    "httpx>=0.27",            # FastAPI test client
+    "ruff>=0.4",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
