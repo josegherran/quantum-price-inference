@@ -8,11 +8,15 @@ No IBM account or credentials are required to open a circuit in the visual edito
 Saving or running on real hardware does require an IBM Quantum account.
 """
 
+import asyncio
+import logging
 import urllib.parse
 import webbrowser
 
 import qiskit.qasm2
 from qiskit import QuantumCircuit
+
+log = logging.getLogger(__name__)
 
 COMPOSER_BASE_URL = "https://quantum.cloud.ibm.com/composer"
 
@@ -49,5 +53,22 @@ def open_in_composer(circuit: QuantumCircuit) -> str:
         The Composer URL that was opened.
     """
     url = composer_url(circuit)
+    log.info("Opening circuit in Composer: %s", url)
     webbrowser.open(url)
     return url
+
+
+async def open_in_composer_async(circuit: QuantumCircuit) -> str:
+    """Async variant of ``open_in_composer``.
+
+    Delegates the blocking ``webbrowser.open`` call to a thread so the event
+    loop is not stalled.  Suitable for use inside FastAPI route handlers or
+    async notebook cells.
+
+    Args:
+        circuit: Any Qiskit QuantumCircuit.
+
+    Returns:
+        The Composer URL that was opened.
+    """
+    return await asyncio.to_thread(open_in_composer, circuit)
