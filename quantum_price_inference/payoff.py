@@ -117,12 +117,15 @@ class LinearPayoff:
             ImportError: if ``qiskit-finance`` is not installed.
         """
         try:
-            from qiskit_finance.circuit.library import LinearAmplitudeFunction  # type: ignore[import]
-        except ImportError as exc:
-            raise ImportError(
-                "qiskit-finance is required for circuit payoff encoding. "
-                "Install it with: uv sync --extra notebook"
-            ) from exc
+            from qiskit.circuit.library import LinearAmplitudeFunction  # type: ignore[import]
+        except ImportError:
+            try:
+                from qiskit_finance.circuit.library import LinearAmplitudeFunction  # type: ignore[import]
+            except ImportError as exc:
+                raise ImportError(
+                    "LinearAmplitudeFunction is required for circuit payoff encoding. "
+                    "Install notebook dependencies with: uv sync --extra notebook"
+                ) from exc
 
         # Slope and intercept normalised so the function lives in [0, 1]
         slope_norm = self.slope / self.max_value
@@ -184,12 +187,15 @@ class ThresholdPayoff:
             ImportError: if ``qiskit-finance`` is not installed.
         """
         try:
-            from qiskit_finance.circuit.library import LinearAmplitudeFunction  # type: ignore[import]
-        except ImportError as exc:
-            raise ImportError(
-                "qiskit-finance is required for circuit payoff encoding. "
-                "Install it with: uv sync --extra notebook"
-            ) from exc
+            from qiskit.circuit.library import LinearAmplitudeFunction  # type: ignore[import]
+        except ImportError:
+            try:
+                from qiskit_finance.circuit.library import LinearAmplitudeFunction  # type: ignore[import]
+            except ImportError as exc:
+                raise ImportError(
+                    "LinearAmplitudeFunction is required for circuit payoff encoding. "
+                    "Install notebook dependencies with: uv sync --extra notebook"
+                ) from exc
 
         n = 2**model.num_qubits
         step = (model.high - model.low) / n  # one grid interval

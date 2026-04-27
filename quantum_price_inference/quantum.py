@@ -136,7 +136,11 @@ def estimate(
     value = result_raw.estimation * max_value
     ci_raw = result_raw.confidence_interval
     ci = (ci_raw[0] * max_value, ci_raw[1] * max_value)
-    num_oracle_calls = result_raw.num_oracle_calls
+    num_oracle_calls = getattr(
+        result_raw,
+        "num_oracle_queries",
+        getattr(result_raw, "num_oracle_calls", 0),
+    )
 
     result = QuantumResult(
         value=value,

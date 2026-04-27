@@ -1,11 +1,11 @@
-# quantum-price-inference
+# A quantum price inference system
 
 A quantum price inference simulation system that uses quantum algorithms for inferring asset prices using amplitude estimation and quantum Monte Carlo methods, with two interfaces:
 
 - **Jupyter Notebook** — researcher interface with circuit visualizations, price simulations, and full physics derivations
 - **REST API** — FastAPI service for programmatic access to quantum simulations.
 
-## general approach
+## General approach
 
 Pricing a product or service is fundamentally a **probability problem**. Instead of computing a fixed number, we estimate an expected value over uncertain outcomes:
 
@@ -34,16 +34,16 @@ The quantum approach does not change *what* is calculated — only *how efficien
 
 See [Quantum_Workshop_Facilitator_Script.md](Quantum_Workshop_Facilitator_Script.md) for the full 90-minute workshop guide designed for non-technical stakeholders.
 
-## features
+## Features
 
-- simulate the price of a product or service using quantum amplitude estimation
-- model uncertainty over demand, cost, usage, or any continuous business variable
-- define custom payoff functions (margin, penalty, benefit) applied to simulated outcomes
-- run classical Monte Carlo and quantum QAE side-by-side for direct comparison
-- visualize quantum circuits and probability distributions in the notebook interface
-- expose all simulations via a REST API for programmatic and integration use
+- Simulate the price of a product or service using quantum amplitude estimation
+- Model uncertainty over demand, cost, usage, or any continuous business variable
+- Define custom payoff functions (margin, penalty, benefit) applied to simulated outcomes
+- Run classical Monte Carlo and quantum QAE side-by-side for direct comparison
+- Visualize quantum circuits and probability distributions in the notebook interface
+- Expose all simulations via a REST API for programmatic and integration use
 
-## requirements
+## Requirements
 
 - Python 3.10+
 - [uv](https://docs.astral.sh/uv/) — fast Python package and project manager
@@ -61,7 +61,7 @@ All other dependencies are declared in [pyproject.toml](pyproject.toml):
 | `jupyter`, `ipykernel` | interactive notebook interface *(optional)* |
 | `qiskit-finance` | pre-built uncertainty distributions and payoff circuits *(optional)* |
 
-## circuit visualization
+## Circuit Visualization
 
 Circuits can be visualized locally (via Matplotlib) or interactively in **IBM Quantum Composer** — no IBM account needed to open a circuit in the visual editor.
 
@@ -94,7 +94,7 @@ The utility exports the circuit to **OpenQASM 2.0** and encodes it as a `?code=`
 
 > Composer: <https://quantum.cloud.ibm.com/composer>
 
-## project structure
+## Project Structure
 
 ```file
 quantum-price-inference/
@@ -119,7 +119,7 @@ quantum-price-inference/
 └── Quantum_Workshop_Facilitator_Script.md
 ```
 
-## installation
+## Installation
 
 ```bash
 # clone the repository
@@ -149,7 +149,7 @@ uv run jupyter notebook
 uv run uvicorn api.main:app --reload
 ```
 
-### run the notebook
+### Run the Notebook
 
 ```bash
 uv run jupyter notebook
@@ -157,7 +157,7 @@ uv run jupyter notebook
 
 Open `notebook/quantum_price_inference.ipynb`.
 
-### run the REST API
+### Run the REST API
 
 ```bash
 uv run uvicorn api.main:app --reload

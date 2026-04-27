@@ -41,7 +41,8 @@ Participants will:
 > We don’t price based on what will happen – we price based on what *might* happen.
 
 Key idea:
-```formula
+
+```code
 Fair Price = Expected Value = E[g(X)]
 ```
 
