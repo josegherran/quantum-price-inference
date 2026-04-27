@@ -94,6 +94,31 @@ The utility exports the circuit to **OpenQASM 2.0** and encodes it as a `?code=`
 
 > Composer: <https://quantum.cloud.ibm.com/composer>
 
+## project structure
+
+```
+quantum-price-inference/
+├── quantum_price_inference/      # core library — pure Python, no side effects
+│   ├── _log.py                   # configure_logging() utility
+│   ├── uncertainty.py            # NormalUncertaintyModel, LogNormalUncertaintyModel
+│   ├── payoff.py                 # LinearPayoff, ThresholdPayoff
+│   ├── classical.py              # classical Monte Carlo engine (estimate / estimate_async)
+│   ├── quantum.py                # quantum QAE engine (estimate / estimate_async)
+│   └── composer.py               # IBM Quantum Composer export utilities
+├── api/                          # FastAPI REST service
+│   ├── main.py                   # app factory, lifespan, health endpoint
+│   ├── schemas.py                # shared Pydantic request/response models
+│   └── routes/
+│       ├── classical.py          # POST /estimate/classical
+│       └── quantum.py            # POST /estimate/quantum
+├── notebook/
+│   └── quantum_price_inference.ipynb   # 90-min workshop demo notebook
+├── pyproject.toml                # dependencies, build config, ruff settings
+├── AGENTS.md                     # agent/AI coding instructions
+├── EXPLAINER.md                  # plain-language project explainer
+└── Quantum_Workshop_Facilitator_Script.md
+```
+
 ## installation
 
 ```bash

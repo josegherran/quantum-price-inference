@@ -53,7 +53,7 @@ It gets to a good answer **much faster** than the classical way.
 No matter what you're pricing — lemonade, cloud software, or a space rocket — the recipe is always the same:
 
 | Step | Name | What it means |
-|---|---|---|
+| --- | --- | --- |
 | 1 | **Uncertainty Model** | What things might change? (weather, demand, cost) |
 | 2 | **Payoff Function** | If that happens, how much do I earn or lose? |
 | 3 | **Encoding** | Load all those possibilities into the computer |

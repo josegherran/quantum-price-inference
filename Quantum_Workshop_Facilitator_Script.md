@@ -1,18 +1,22 @@
 
 # Quantum Workshop Facilitator Script (90 min)
+
 ## Pricing Under Uncertainty – A Quantum Perspective (for Non-Financial Stakeholders)
 
 ---
 
 ## Audience
+
 Business, IT, Architecture, Innovation, Data, Product leaders (no finance or quantum prerequisites).
 
 ---
 
 ## Workshop Objective (Read aloud – 2 min)
+
 > *Today we will see how pricing a product or service is really a probability problem – and how quantum computing offers a new way to estimate value under uncertainty.*
 
 Participants will:
+
 - Understand pricing as an **expected value**, not a fixed number
 - Compare **classical vs quantum Monte Carlo** conceptually
 - Walk away with a **business-ready mental model**, not math or physics
@@ -20,6 +24,7 @@ Participants will:
 ---
 
 ## Agenda (90 min)
+
 1. Why pricing is a probability problem (10 min)
 2. Classical Monte Carlo – intuition only (15 min)
 3. What quantum Monte Carlo changes (10 min)
@@ -36,13 +41,15 @@ Participants will:
 > We don’t price based on what will happen – we price based on what *might* happen.
 
 Key idea:
-```
+```formula
 Fair Price = Expected Value = E[g(X)]
 ```
+
 - `X`: uncertain future outcome (demand, cost, incidents, FX, usage)
 - `g(X)`: business impact (revenue, margin, penalty)
 
 **Example (non-financial):**
+
 - Tomorrow’s cloud cost varies
 - SLA penalties may or may not occur
 - Usage volume is uncertain
@@ -57,15 +64,18 @@ Pricing = weighted average across possibilities.
 > Monte Carlo means: simulate many futures, average the results.
 
 Steps:
+
 1. Generate many scenarios
 2. Compute business outcome for each
 3. Average
 
 Key intuition:
+
 - Accuracy improves slowly
 - To double precision → ~4× more simulations
 
 This becomes expensive when:
+
 - Scenarios are complex
 - Confidence must be tight
 - Decisions are near real-time
@@ -78,6 +88,7 @@ This becomes expensive when:
 > Quantum does not change *what* we calculate – only *how* efficiently we estimate it.
 
 Comparison:
+
 - Classical MC: counts frequencies
 - Quantum MC: estimates probabilities directly (amplitudes)
 
@@ -114,12 +125,14 @@ Pricing with quantum computers always has **4 building blocks**:
 
 **Facilitator runs prepared notebook** (participants watch & interpret).
 
-### What to emphasize:
+### What to emphasize
+
 - We model uncertainty (example: variable outcome)
 - We define a payoff (value or profit)
 - We estimate an expected value
 
-### Show side-by-side:
+### Show side-by-side
+
 - Classical Monte Carlo result
 - Quantum amplitude estimation result
 
@@ -136,13 +149,15 @@ Do **not** discuss hardware, qubits, or performance benchmarks.
 > Forget finance. This applies directly to our products and services.
 
 ### Mapping Template
+
 | Finance Term | Business Meaning |
-|-------------|------------------|
+| ------------- | ------------------ |
 | Underlying price | Demand / cost / usage |
 | Payoff | Margin / penalty / benefit |
 | Option price | Fair price |
 
-### Business Examples:
+### Business Examples
+
 - API pricing with variable usage
 - Service with SLA penalties
 - Subscription with churn uncertainty
@@ -155,6 +170,7 @@ Key insight:
 ## 7. Wrap-Up – Key Takeaways (5 min)
 
 Reinforce:
+
 1. Pricing is probabilistic
 2. Monte Carlo estimates value
 3. Quantum improves estimation, not logic
@@ -166,6 +182,7 @@ Reinforce:
 ---
 
 ## Deliverables
+
 - This facilitator script
 - One demo notebook
 - One reusable mental model

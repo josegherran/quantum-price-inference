@@ -11,19 +11,28 @@ See [README.md](README.md) for architecture, dependency table, and run commands.
 
 ## Architecture
 
-```file stucture
+```
 quantum_price_inference/   # core library (pure Python, no side effects)
-│  composer.py             # IBM Quantum Composer export utilities (implemented)
-│  uncertainty.py          # uncertainty model (TODO)
-│  payoff.py               # payoff function (TODO)
-│  classical.py            # classical Monte Carlo engine (TODO)
-│  quantum.py              # quantum QAE engine (TODO)
-notebook/                  # Jupyter notebook (TODO)
-api/                       # FastAPI app (TODO)
-│  main.py
+│  _log.py                 # configure_logging() utility
+│  composer.py             # IBM Quantum Composer export (circuit_to_qasm2, composer_url)
+│  uncertainty.py          # NormalUncertaintyModel, LogNormalUncertaintyModel
+│  payoff.py               # LinearPayoff, ThresholdPayoff
+│  classical.py            # classical Monte Carlo engine (estimate / estimate_async)
+│  quantum.py              # quantum QAE engine (estimate / estimate_async)
+notebook/
+│  quantum_price_inference.ipynb   # 90-min workshop demo
+api/
+│  main.py                 # FastAPI app, lifespan, health endpoint
+│  schemas.py              # Pydantic request/response models
 │  routes/
-│     classical.py
-│     quantum.py
+│     classical.py         # POST /estimate/classical
+│     quantum.py           # POST /estimate/quantum
+tests/
+│  conftest.py             # shared fixtures
+│  test_uncertainty.py
+│  test_payoff.py
+│  test_classical.py
+│  test_api.py
 ```
 
 ### 4-block model (every simulation follows this)
