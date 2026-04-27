@@ -2,8 +2,6 @@
 
 import asyncio
 
-import pytest
-
 from quantum_price_inference.classical import estimate, estimate_async, ClassicalResult
 
 

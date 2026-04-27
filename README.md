@@ -96,7 +96,7 @@ The utility exports the circuit to **OpenQASM 2.0** and encodes it as a `?code=`
 
 ## project structure
 
-```
+```file
 quantum-price-inference/
 ├── quantum_price_inference/      # core library — pure Python, no side effects
 │   ├── _log.py                   # configure_logging() utility

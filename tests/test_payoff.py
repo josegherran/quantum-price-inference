@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from quantum_price_inference.payoff import LinearPayoff, ThresholdPayoff
+from quantum_price_inference.payoff import LinearPayoff
 
 
 class TestLinearPayoff:

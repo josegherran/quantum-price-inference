@@ -1,6 +1,5 @@
 """Tests for quantum_price_inference.uncertainty."""
 
-import numpy as np
 import pytest
 
 from quantum_price_inference.uncertainty import NormalUncertaintyModel, LogNormalUncertaintyModel

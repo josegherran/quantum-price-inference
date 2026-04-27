@@ -11,7 +11,7 @@ See [README.md](README.md) for architecture, dependency table, and run commands.
 
 ## Architecture
 
-```
+```file
 quantum_price_inference/   # core library (pure Python, no side effects)
 │  _log.py                 # configure_logging() utility
 │  composer.py             # IBM Quantum Composer export (circuit_to_qasm2, composer_url)
