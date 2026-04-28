@@ -14,16 +14,26 @@ import urllib.parse
 import webbrowser
 
 import qiskit.qasm2
-from qiskit import QuantumCircuit
+from qiskit import QuantumCircuit, transpile
 
 log = logging.getLogger(__name__)
 
 COMPOSER_BASE_URL = "https://quantum.cloud.ibm.com/composer"
 
 
+def _composer_compatible_circuit(circuit: QuantumCircuit) -> QuantumCircuit:
+    """Return a Composer-friendly version of the circuit.
+
+    Composer is more reliable when fed plain OpenQASM 2 basis gates rather than
+    nested library instructions with auto-generated custom gate definitions.
+    """
+    simplified = circuit.decompose(reps=10)
+    return transpile(simplified, basis_gates=["u", "cx"], optimization_level=0)
+
+
 def circuit_to_qasm2(circuit: QuantumCircuit) -> str:
     """Return the OpenQASM 2.0 string for a Qiskit circuit."""
-    return qiskit.qasm2.dumps(circuit)
+    return qiskit.qasm2.dumps(_composer_compatible_circuit(circuit))
 
 
 def composer_url(circuit: QuantumCircuit) -> str:
