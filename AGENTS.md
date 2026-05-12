@@ -22,16 +22,18 @@ quantum_price_inference/   # core library (pure Python, no side effects)
 notebook/
 │  quantum_price_inference.ipynb   # 90-min workshop demo
 api/
-│  main.py                 # FastAPI app, lifespan, health endpoint
+│  main.py                 # FastAPI app, lifespan, CORS middleware, rate-limit wiring
+│  limiter.py              # shared slowapi Limiter instance (avoids circular imports)
 │  schemas.py              # Pydantic request/response models
 │  routes/
-│     classical.py         # POST /estimate/classical
-│     quantum.py           # POST /estimate/quantum
+│     classical.py         # POST /estimate/classical  (30 req/min, n_samples 100–100 000)
+│     quantum.py           # POST /estimate/quantum    (10 req/min, epsilon 0.001–0.1, 30 s timeout)
 tests/
 │  conftest.py             # shared fixtures
 │  test_uncertainty.py
 │  test_payoff.py
 │  test_classical.py
+│  test_quantum.py         # 14 tests — unit (no extras needed) + integration (skipped without qiskit-finance)
 │  test_api.py
 ```
 
@@ -70,6 +72,25 @@ uv run jupyter notebook
 - Quantum circuits are exported as **OpenQASM 2.0** for Composer; use `qiskit.qasm2.dumps()` (not the deprecated `circuit.qasm()` method)
 - API and notebook are consumers of the core library — keep business logic in `quantum_price_inference/`, not in route handlers or notebook cells
 - Optional dependencies (`qiskit-finance`, `jupyter`) must be **guarded with try/import** inside functions, not at module top level, so the core library installs without extras
+- **All qiskit imports in `composer.py` are deferred inside functions** — do not add module-level qiskit imports there
+
+### Rate Limiting and CORS
+
+The API uses `slowapi` for per-IP rate limiting. The shared `Limiter` instance lives in `api/limiter.py` — import it from there in route modules to avoid circular imports with `api/main.py`.
+
+```python
+# correct pattern in route modules
+from api.limiter import limiter
+
+@router.post("/my-endpoint")
+@limiter.limit("10/minute")
+async def my_handler(request: Request, ...):
+    ...
+```
+
+The `request: Request` parameter **must** be the first parameter of any rate-limited handler — `slowapi` requires it to extract the client IP.
+
+CORS origins are configured in `api/main.py` via `CORSMiddleware`. The defaults allow `localhost:8888` and `localhost:3000`. Do not hardcode origins in route handlers.
 
 ### Logging
 
@@ -102,6 +123,21 @@ async def estimate_async(model, payoff, **kwargs) -> float:
 ```
 
 FastAPI route handlers must be `async def` and call the `_async` variant so the event loop is never blocked. Notebook cells can use either form.
+
+### Testing
+
+Tests that require `qiskit-finance` (circuit tests, quantum integration tests) must use `pytest.importorskip` so they are skipped gracefully in environments without the notebook extra:
+
+```python
+@pytest.fixture(scope="module")
+def qiskit_finance():
+    return pytest.importorskip("qiskit_finance", reason="qiskit-finance not installed")
+
+def test_something_with_circuit(qiskit_finance, normal_model):
+    ...
+```
+
+The quantum engine integration tests in `tests/test_quantum.py` follow this pattern. Do not add unconditional `qiskit_finance` imports at the top of test files.
 
 ## Workshop Context
 

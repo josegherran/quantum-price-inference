@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query, Request
 
+from api.limiter import limiter
 from quantum_price_inference import (
     NormalUncertaintyModel,
     LinearPayoff,
@@ -28,14 +29,29 @@ router = APIRouter(prefix="/estimate", tags=["classical"])
     summary="Classical Monte Carlo estimation",
     description=(
         "Estimates E[g(X)] by drawing random samples from a Normal uncertainty model "
-        "and averaging the linear payoff. Reference baseline for the quantum comparison."
+        "and averaging the linear payoff. Reference baseline for the quantum comparison.\n\n"
+        "**Bounds:** `n_samples` is capped at 100 000 to prevent CPU exhaustion."
     ),
 )
-async def estimate_classical(body: EstimateRequest, n_samples: int = 10_000, seed: int | None = None):
+@limiter.limit("30/minute")
+async def estimate_classical(
+    request: Request,
+    body: EstimateRequest,
+    n_samples: int = Query(
+        default=10_000,
+        ge=100,
+        le=100_000,
+        description="Number of random samples to draw (100–100 000).",
+    ),
+    seed: int | None = Query(
+        default=None,
+        description="Optional random seed for reproducibility.",
+    ),
+):
     """Run classical Monte Carlo and return the expected payoff.
 
     Query parameters:
-    - **n_samples**: number of random samples (default 10 000)
+    - **n_samples**: number of random samples (100–100 000, default 10 000)
     - **seed**: optional random seed for reproducibility
     """
     log.info(

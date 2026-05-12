@@ -43,6 +43,19 @@ See [Quantum_Workshop_Facilitator_Script.md](Quantum_Workshop_Facilitator_Script
 - Visualize quantum circuits and probability distributions in the notebook interface
 - Expose all simulations via a REST API for programmatic and integration use
 
+## API Behaviour
+
+Both estimation endpoints share the same request schema (uncertainty + payoff parameters) and enforce the following constraints:
+
+| Endpoint | Rate limit | Key bounds | Timeout |
+| --- | --- | --- | --- |
+| `POST /estimate/classical` | 30 req/min per IP | `n_samples`: 100–100 000 | — |
+| `POST /estimate/quantum` | 10 req/min per IP | `epsilon`: 0.001–0.1; `alpha`: 0.01–0.5 | 30 s (HTTP 504) |
+
+Exceeded rate limits return HTTP 429 with a `Retry-After` header. Out-of-range parameters return HTTP 422.
+
+CORS is enabled for `localhost:8888` (Jupyter) and `localhost:3000` by default. Expand `allow_origins` in `api/main.py` for production deployments.
+
 ## Requirements
 
 - Python 3.10+
@@ -58,6 +71,7 @@ All other dependencies are declared in [pyproject.toml](pyproject.toml):
 | `matplotlib` | circuit and distribution visualizations |
 | `fastapi` | REST API server |
 | `uvicorn[standard]` | ASGI server for FastAPI |
+| `slowapi` | per-IP rate limiting for FastAPI |
 | `jupyter`, `ipykernel` | interactive notebook interface *(optional)* |
 | `qiskit-finance` | pre-built uncertainty distributions and payoff circuits *(optional)* |
 
@@ -106,16 +120,27 @@ quantum-price-inference/
 │   ├── quantum.py                # quantum QAE engine (estimate / estimate_async)
 │   └── composer.py               # IBM Quantum Composer export utilities
 ├── api/                          # FastAPI REST service
-│   ├── main.py                   # app factory, lifespan, health endpoint
+│   ├── main.py                   # app factory, lifespan, CORS, rate-limit wiring
+│   ├── limiter.py                # shared slowapi Limiter instance
 │   ├── schemas.py                # shared Pydantic request/response models
 │   └── routes/
-│       ├── classical.py          # POST /estimate/classical
-│       └── quantum.py            # POST /estimate/quantum
+│       ├── classical.py          # POST /estimate/classical  (30 req/min, n_samples 100–100 000)
+│       └── quantum.py            # POST /estimate/quantum    (10 req/min, epsilon 0.001–0.1, 30 s timeout)
+├── tests/
+│   ├── conftest.py               # shared fixtures
+│   ├── test_uncertainty.py
+│   ├── test_payoff.py
+│   ├── test_classical.py
+│   ├── test_quantum.py           # 14 tests — unit + integration (skipped without qiskit-finance)
+│   └── test_api.py
 ├── notebook/
 │   └── quantum_price_inference.ipynb   # 90-min workshop demo notebook
+├── docs/
+│   ├── IMPROVEMENT_PLAN.md       # phased improvement roadmap (Wave 1 complete)
+│   ├── EXPLAINER.md              # plain-language project explainer
+│   └── STORYBOARD.md             # 15-min stakeholder presentation storyboard
 ├── pyproject.toml                # dependencies, build config, ruff settings
 ├── AGENTS.md                     # agent/AI coding instructions
-├── EXPLAINER.md                  # plain-language project explainer
 └── Quantum_Workshop_Facilitator_Script.md
 ```
 
