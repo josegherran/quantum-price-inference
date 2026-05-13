@@ -15,7 +15,7 @@ This plan organises improvements into three waves ordered by business value rela
 | Wave | Status | Completed | Remaining |
 |---|---|---|---|
 | Wave 1 — Correctness, Security, Reliability | ✅ Complete | 1.1, 1.2, 1.3, 1.4, 1.5, 1.6 | — |
-| Wave 2 — Observability and Performance | ⬜ Not started | — | 2.1, 2.2, 2.3, 2.4, 2.5 |
+| Wave 2 — Observability and Performance | ✅ Complete | 2.1, 2.2, 2.3, 2.4, 2.5 | — |
 | Wave 3 — Portability, Scalability, Maintainability | ⬜ Not started | — | 3.1, 3.2, 3.3, 3.4, 3.5 |
 
 ### Wave 1 — Completed (all 6 items)

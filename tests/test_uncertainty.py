@@ -62,3 +62,24 @@ class TestLogNormalUncertaintyModel:
     def test_default_low_is_positive(self):
         model = LogNormalUncertaintyModel(mu=1.0, sigma=1.0)
         assert model.low > 0
+
+    def test_probabilities_non_negative(self, lognormal_model):
+        _, probs = lognormal_model.samples()
+        assert (probs >= 0).all()
+
+    def test_support_within_bounds(self, lognormal_model):
+        x, _ = lognormal_model.samples()
+        assert x.min() >= lognormal_model.low
+        assert x.max() <= lognormal_model.high
+
+    def test_num_qubits_resolution(self):
+        for q in [2, 3, 4]:
+            model = LogNormalUncertaintyModel(mu=4.6, sigma=0.3, num_qubits=q)
+            x, probs = model.samples()
+            assert len(x) == 2**q
+
+    def test_circuit_requires_qiskit_finance(self, lognormal_model):
+        """LogNormalUncertaintyModel.circuit() is skipped without qiskit-finance."""
+        pytest.importorskip("qiskit_finance", reason="qiskit-finance not installed")
+        circuit = lognormal_model.circuit()
+        assert circuit.num_qubits == lognormal_model.num_qubits

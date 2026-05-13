@@ -35,4 +35,3 @@ __all__ = [
     "open_in_composer",
     "open_in_composer_async",
 ]
-

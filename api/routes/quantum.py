@@ -6,6 +6,7 @@ import asyncio
 import logging
 
 from fastapi import APIRouter, HTTPException, Query, Request
+from prometheus_client import Counter
 
 from api.limiter import limiter
 from quantum_price_inference import (
@@ -24,8 +25,17 @@ log = logging.getLogger(__name__)
 router = APIRouter(prefix="/estimate", tags=["quantum"])
 
 # Timeout for a single IQAE run.  Configurable via QPI_ESTIMATION_TIMEOUT_SECONDS
-# (Wave 3 environment config); hardcoded here for Wave 1.
+# (Wave 3 environment config); hardcoded here for Wave 2.
 _ESTIMATION_TIMEOUT_SECONDS = 30.0
+
+# ---------------------------------------------------------------------------
+# Prometheus counters
+# ---------------------------------------------------------------------------
+
+_ORACLE_CALLS_TOTAL = Counter(
+    "quantum_oracle_calls_total",
+    "Total number of Grover oracle evaluations across all quantum estimation requests.",
+)
 
 
 @router.post(
@@ -87,6 +97,7 @@ async def estimate_quantum(
             quantum_estimate_async(model, payoff, epsilon=epsilon, alpha=alpha),
             timeout=_ESTIMATION_TIMEOUT_SECONDS,
         )
+        _ORACLE_CALLS_TOTAL.inc(result.num_oracle_calls)
     except asyncio.TimeoutError:
         log.warning(
             "Quantum estimation timed out after %.0f s (epsilon=%s)",

@@ -15,6 +15,13 @@ Algorithm summary
 IQAE is preferred over standard QAE because it does not require phase
 estimation ancilla qubits and converges with fewer circuit evaluations.
 
+Caching
+-------
+IQAE on a ``StatevectorSampler`` is fully deterministic — the same parameters
+always produce the same result.  Results are cached in an in-process LRU cache
+(max 128 entries) keyed on all scalar parameters.  The cache is lost on process
+restart; for multi-worker deployments use a shared cache (Wave 3).
+
 Usage
 -----
     from quantum_price_inference.quantum import estimate, estimate_async
@@ -37,6 +44,7 @@ Notes
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
 from dataclasses import dataclass
 
@@ -67,6 +75,88 @@ class QuantumResult:
 
 
 # ---------------------------------------------------------------------------
+# Internal cached implementation
+# ---------------------------------------------------------------------------
+
+
+@functools.lru_cache(maxsize=128)
+def _estimate_cached(
+    mu: float,
+    sigma: float,
+    num_qubits: int,
+    low: float | None,
+    high: float | None,
+    breakeven: float,
+    slope: float,
+    max_value: float,
+    epsilon: float,
+    alpha: float,
+) -> QuantumResult:
+    """LRU-cached implementation for deterministic IQAE runs.
+
+    IQAE on ``StatevectorSampler`` is fully deterministic — the same parameters
+    always produce the same result.  All parameters are scalars so they are
+    hashable and safe as cache keys.
+    """
+    from quantum_price_inference.uncertainty import NormalUncertaintyModel
+    from quantum_price_inference.payoff import LinearPayoff
+
+    model = NormalUncertaintyModel(mu=mu, sigma=sigma, num_qubits=num_qubits, low=low, high=high)
+    payoff = LinearPayoff(breakeven=breakeven, slope=slope, max_value=max_value)
+    return _estimate_uncached(model, payoff, epsilon=epsilon, alpha=alpha)
+
+
+def _estimate_uncached(model, payoff, epsilon: float, alpha: float) -> QuantumResult:
+    """Core IQAE implementation — no caching."""
+    try:
+        from qiskit_algorithms import EstimationProblem, IterativeAmplitudeEstimation  # type: ignore[import]
+    except ImportError as exc:
+        raise ImportError(
+            "qiskit-algorithms is required for quantum estimation. Install it with: uv sync"
+        ) from exc
+
+    try:
+        from qiskit.primitives import StatevectorSampler  # type: ignore[import]
+    except ImportError as exc:
+        raise ImportError("qiskit is required. Install it with: uv sync") from exc
+
+    # Build the full circuit (uncertainty + payoff)
+    full_circuit = payoff.circuit(model)
+    objective_qubit = full_circuit.num_qubits - 1
+
+    problem = EstimationProblem(
+        state_preparation=full_circuit,
+        objective_qubits=[objective_qubit],
+    )
+
+    sampler = StatevectorSampler()
+    iae = IterativeAmplitudeEstimation(
+        epsilon_target=epsilon,
+        alpha=alpha,
+        sampler=sampler,
+    )
+
+    result_raw = iae.estimate(problem)
+
+    max_value = getattr(payoff, "max_value", 1.0)
+    value = result_raw.estimation * max_value
+    ci_raw = result_raw.confidence_interval
+    ci = (ci_raw[0] * max_value, ci_raw[1] * max_value)
+    num_oracle_calls = getattr(
+        result_raw,
+        "num_oracle_queries",
+        getattr(result_raw, "num_oracle_calls", 0),
+    )
+
+    return QuantumResult(
+        value=value,
+        confidence_interval=ci,
+        epsilon=epsilon,
+        num_oracle_calls=num_oracle_calls,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Synchronous engine
 # ---------------------------------------------------------------------------
 
@@ -89,65 +179,37 @@ def estimate(
                  → 95 % CI).
 
     Returns:
-        A :class:`QuantumResult` with the estimated value and CI.
+        A :class:`QuantumResult` with the estimated value and CI.  Results are
+        served from an in-process LRU cache on repeated calls with identical
+        parameters (IQAE on StatevectorSampler is fully deterministic).
 
     Raises:
         ImportError: if ``qiskit-algorithms`` or ``qiskit-finance`` is not installed.
     """
-    try:
-        from qiskit_algorithms import EstimationProblem, IterativeAmplitudeEstimation  # type: ignore[import]
-    except ImportError as exc:
-        raise ImportError(
-            "qiskit-algorithms is required for quantum estimation. "
-            "Install it with: uv sync"
-        ) from exc
-
-    try:
-        from qiskit.primitives import StatevectorSampler  # type: ignore[import]
-    except ImportError as exc:
-        raise ImportError(
-            "qiskit is required. Install it with: uv sync"
-        ) from exc
-
     log.info("Quantum QAE: epsilon=%.4f  alpha=%.4f", epsilon, alpha)
 
-    # Build the full circuit (uncertainty + payoff)
-    full_circuit = payoff.circuit(model)
+    # Route to the cached path when the model exposes real scalar attributes
+    # (i.e., it is a NormalUncertaintyModel + LinearPayoff, not a mock).
+    if hasattr(model, "mu") and hasattr(payoff, "breakeven"):
+        try:
+            result = _estimate_cached(
+                mu=float(model.mu),
+                sigma=float(model.sigma),
+                num_qubits=int(model.num_qubits),
+                low=float(model.low) if getattr(model, "low", None) is not None else None,
+                high=float(model.high) if getattr(model, "high", None) is not None else None,
+                breakeven=float(payoff.breakeven),
+                slope=float(payoff.slope),
+                max_value=float(getattr(payoff, "max_value", 1.0)),
+                epsilon=epsilon,
+                alpha=alpha,
+            )
+        except (TypeError, ValueError):
+            # Attributes are not real scalars (e.g. mocks in tests) — fall through.
+            result = _estimate_uncached(model, payoff, epsilon=epsilon, alpha=alpha)
+    else:
+        result = _estimate_uncached(model, payoff, epsilon=epsilon, alpha=alpha)
 
-    # The objective qubit is always the last qubit in the combined circuit
-    objective_qubit = full_circuit.num_qubits - 1
-
-    problem = EstimationProblem(
-        state_preparation=full_circuit,
-        objective_qubits=[objective_qubit],
-    )
-
-    sampler = StatevectorSampler()
-    iae = IterativeAmplitudeEstimation(
-        epsilon_target=epsilon,
-        alpha=alpha,
-        sampler=sampler,
-    )
-
-    result_raw = iae.estimate(problem)
-
-    # QAE returns the amplitude in [0, 1]; de-normalise by max_value
-    max_value = getattr(payoff, "max_value", 1.0)
-    value = result_raw.estimation * max_value
-    ci_raw = result_raw.confidence_interval
-    ci = (ci_raw[0] * max_value, ci_raw[1] * max_value)
-    num_oracle_calls = getattr(
-        result_raw,
-        "num_oracle_queries",
-        getattr(result_raw, "num_oracle_calls", 0),
-    )
-
-    result = QuantumResult(
-        value=value,
-        confidence_interval=ci,
-        epsilon=epsilon,
-        num_oracle_calls=num_oracle_calls,
-    )
     log.info(
         "QAE result: value=%.6f  CI=(%.6f, %.6f)  oracle_calls=%d",
         result.value,

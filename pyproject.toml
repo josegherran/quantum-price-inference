@@ -20,6 +20,7 @@ dependencies = [
     "fastapi>=0.110",
     "uvicorn[standard]>=0.29",
     "slowapi>=0.1.9",          # per-IP rate limiting for FastAPI
+    "prometheus-fastapi-instrumentator>=7.0",  # Prometheus metrics endpoint
 ]
 
 [project.optional-dependencies]

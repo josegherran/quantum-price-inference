@@ -44,6 +44,32 @@ class TestLinearPayoff:
         # At x=10, g = 0.1*10 = 1.0 (saturates)
         assert payoff(10.0) == pytest.approx(1.0)
 
+    def test_circuit_requires_qiskit_finance(self, linear_payoff, normal_model):
+        """LinearPayoff.circuit() is skipped without qiskit-finance."""
+        pytest.importorskip("qiskit_finance", reason="qiskit-finance not installed")
+        circuit = linear_payoff.circuit(normal_model)
+        # Objective qubit is appended — total qubits > model qubits
+        assert circuit.num_qubits > normal_model.num_qubits
+
+    def test_circuit_import_error_without_qiskit(self, linear_payoff, normal_model):
+        """LinearPayoff.circuit() raises ImportError with a helpful message."""
+        import sys
+        from unittest.mock import patch
+
+        with patch.dict(
+            sys.modules,
+            {
+                "qiskit": None,
+                "qiskit.circuit": None,
+                "qiskit.circuit.library": None,
+                "qiskit_finance": None,
+                "qiskit_finance.circuit": None,
+                "qiskit_finance.circuit.library": None,
+            },
+        ):
+            with pytest.raises(ImportError, match="notebook"):
+                linear_payoff.circuit(normal_model)
+
 
 class TestThresholdPayoff:
     def test_zero_below_threshold(self, threshold_payoff):
@@ -63,3 +89,38 @@ class TestThresholdPayoff:
         x = np.linspace(80.0, 120.0, 10)
         result = threshold_payoff.apply(x)
         assert result.dtype == float
+
+    def test_circuit_requires_qiskit_finance(self, threshold_payoff, normal_model):
+        """ThresholdPayoff.circuit() is skipped without qiskit-finance."""
+        pytest.importorskip("qiskit_finance", reason="qiskit-finance not installed")
+        circuit = threshold_payoff.circuit(normal_model)
+        # Objective qubit is appended — total qubits > model qubits
+        assert circuit.num_qubits > normal_model.num_qubits
+
+    def test_circuit_output_within_step_of_threshold(self, threshold_payoff, normal_model):
+        """The steep-ramp approximation should fire within one grid step of the threshold."""
+        pytest.importorskip("qiskit_finance", reason="qiskit-finance not installed")
+        n = 2**normal_model.num_qubits
+        step = (normal_model.high - normal_model.low) / n
+        # The approximation fires within ±step of the true threshold
+        assert threshold_payoff(threshold_payoff.threshold + step) == pytest.approx(1.0)
+        assert threshold_payoff(threshold_payoff.threshold - step - 1e-9) == pytest.approx(0.0)
+
+    def test_circuit_import_error_without_qiskit(self, threshold_payoff, normal_model):
+        """ThresholdPayoff.circuit() raises ImportError with a helpful message."""
+        import sys
+        from unittest.mock import patch
+
+        with patch.dict(
+            sys.modules,
+            {
+                "qiskit": None,
+                "qiskit.circuit": None,
+                "qiskit.circuit.library": None,
+                "qiskit_finance": None,
+                "qiskit_finance.circuit": None,
+                "qiskit_finance.circuit.library": None,
+            },
+        ):
+            with pytest.raises(ImportError, match="notebook"):
+                threshold_payoff.circuit(normal_model)

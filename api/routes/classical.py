@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, HTTPException, Query, Request
+from prometheus_client import Counter
 
 from api.limiter import limiter
 from quantum_price_inference import (
@@ -21,6 +22,15 @@ from api.schemas import (
 log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/estimate", tags=["classical"])
+
+# ---------------------------------------------------------------------------
+# Prometheus counters
+# ---------------------------------------------------------------------------
+
+_SAMPLES_TOTAL = Counter(
+    "classical_samples_total",
+    "Total number of Monte Carlo samples drawn across all requests.",
+)
 
 
 @router.post(
@@ -74,6 +84,7 @@ async def estimate_classical(
             max_value=body.payoff.max_value,
         )
         result = await classical_estimate_async(model, payoff, n_samples=n_samples, seed=seed)
+        _SAMPLES_TOTAL.inc(n_samples)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:

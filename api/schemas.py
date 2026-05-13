@@ -14,19 +14,27 @@ class UncertaintyParams(BaseModel):
     """Parameters describing the uncertain variable."""
 
     mu: float = Field(..., description="Mean of the Normal distribution.", examples=[100.0])
-    sigma: float = Field(..., gt=0, description="Standard deviation (must be > 0).", examples=[15.0])
+    sigma: float = Field(
+        ..., gt=0, description="Standard deviation (must be > 0).", examples=[15.0]
+    )
     num_qubits: int = Field(
         3, ge=1, le=8, description="Qubits used to discretise the distribution (1–8)."
     )
     low: float | None = Field(None, description="Lower bound of the support (defaults to mu − 3σ).")
-    high: float | None = Field(None, description="Upper bound of the support (defaults to mu + 3σ).")
+    high: float | None = Field(
+        None, description="Upper bound of the support (defaults to mu + 3σ)."
+    )
 
 
 class PayoffParams(BaseModel):
     """Parameters describing the linear business payoff."""
 
-    breakeven: float = Field(..., description="Outcome value at which profit starts.", examples=[85.0])
-    slope: float = Field(..., gt=0, description="Profit rate per unit above breakeven.", examples=[0.02])
+    breakeven: float = Field(
+        ..., description="Outcome value at which profit starts.", examples=[85.0]
+    )
+    slope: float = Field(
+        ..., gt=0, description="Profit rate per unit above breakeven.", examples=[0.02]
+    )
     max_value: float = Field(1.0, gt=0, description="Saturation cap (normalises payoff to [0, 1]).")
 
 

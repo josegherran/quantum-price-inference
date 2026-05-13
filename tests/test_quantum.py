@@ -51,7 +51,9 @@ class TestQuantumResultDataclass:
         assert r.num_oracle_calls == 120
 
     def test_frozen(self):
-        r = QuantumResult(value=0.1, confidence_interval=(0.0, 0.2), epsilon=0.05, num_oracle_calls=10)
+        r = QuantumResult(
+            value=0.1, confidence_interval=(0.0, 0.2), epsilon=0.05, num_oracle_calls=10
+        )
         with pytest.raises((AttributeError, TypeError)):
             r.value = 0.9  # type: ignore[misc]
 
@@ -126,7 +128,9 @@ class TestEstimateWithMock:
             },
         ):
             # Force re-import of the function's local imports
-            result = estimate.__wrapped__(model, payoff) if hasattr(estimate, "__wrapped__") else None
+            result = (
+                estimate.__wrapped__(model, payoff) if hasattr(estimate, "__wrapped__") else None
+            )
 
         return result, model, payoff, fake_iae_instance
 
