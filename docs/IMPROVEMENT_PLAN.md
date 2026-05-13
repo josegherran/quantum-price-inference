@@ -31,6 +31,18 @@ This plan organises improvements into three waves ordered by business value rela
 
 **Test suite after Wave 1:** 56 passed, 0 failed. Ruff clean on all source files.
 
+### Wave 2 — Completed (all 5 items)
+
+| Item | Description | Delivered |
+|---|---|---|
+| 2.1 | Structured logging with request IDs | `_log.py` extended with `_RequestIDFilter`, `_JsonFormatter`, `request_id_var` ContextVar, and `json: bool` param on `configure_logging`; new `api/middleware.py` with `RequestIDMiddleware` that assigns UUID4 per request, echoes client-supplied `X-Request-ID`, and resets the ContextVar after each request |
+| 2.2 | Prometheus metrics endpoint | `prometheus-fastapi-instrumentator>=7.0` added; `Instrumentator` wired in `api/main.py` lifespan; `/metrics` exposed; custom `classical_samples_total` and `quantum_oracle_calls_total` counters added to route handlers |
+| 2.3 | Result caching for deterministic simulations | `functools.lru_cache(maxsize=256)` on `_estimate_cached` in `classical.py` (keyed on all scalar params + seed; bypassed when seed is None or payoff has no `breakeven`); `lru_cache(maxsize=128)` on `_estimate_cached` in `quantum.py` (IQAE on StatevectorSampler is fully deterministic; keyed on all scalar params); both guard against mock/non-scalar attributes with try/except |
+| 2.4 | `/health` liveness vs readiness split | `/health/live` (always 200 if process running) and `/health/ready` (checks qiskit, qiskit_algorithms, qiskit_finance importability) added; legacy `/health` preserved for backward compatibility |
+| 2.5 | Expanded test coverage | `ThresholdPayoff.circuit()` tested (2 tests); `LinearPayoff.circuit()` tested (2 tests); `LogNormalUncertaintyModel` parity tests added (4 new, now 8 total matching Normal); `tests/test_composer.py` created (9 tests: 3 import-safety + 6 integration); API quantum endpoint tested (6 tests); health split tested (3 tests); request ID header tested (2 tests); cache behaviour tested (4 tests); `/metrics` tested (2 tests) |
+
+**Test suite after Wave 2:** 90 passed, 0 failed. Ruff clean on all source files.
+
 ---
 
 ## Current State and Gaps
@@ -65,13 +77,13 @@ This plan organises improvements into three waves ordered by business value rela
 | Characteristic | Baseline (1–5) | After Wave 1 | Wave 2 Target | Wave 3 Target |
 |---|---|---|---|---|
 | Security | 2 | **4** ✅ | 4 | 4 |
-| Availability | 2 | **3** ✅ | 4 | 4 |
-| Performance | 2 | 2 | 4 | 4 |
-| Observability | 1 | 1 | 4 | 4 |
-| Maintainability | 3 | **4** ✅ | 4 | 5 |
+| Availability | 2 | **3** ✅ | **4** ✅ | 4 |
+| Performance | 2 | 2 | **4** ✅ | 4 |
+| Observability | 1 | 1 | **4** ✅ | 4 |
+| Maintainability | 3 | **4** ✅ | **4** ✅ | 5 |
 | Portability | 1 | 1 | 1 | 4 |
 | Scalability | 2 | 2 | 2 | 3 |
-| Cost | 2 | **3** ✅ | 4 | 4 |
+| Cost | 2 | **3** ✅ | **4** ✅ | 4 |
 
 ---
 
@@ -494,15 +506,15 @@ Wave 3 (portability/scalability) — blocked on Wave 1 ✅ (now unblocked)
 | Metric | Baseline | After Wave 1 | Wave 2 Target | Wave 3 Target |
 |---|---|---|---|---|
 | Test count | 42 | **56** ✅ | 70+ | 80+ |
-| Test coverage (core library) | ~70% (no quantum tests) | **~85%** ✅ | 90% | 95% |
+| Test coverage (core library) | ~70% (no quantum tests) | **~85%** ✅ | **90%** ✅ | 95% |
 | Import-safe without extras | No (`composer.py`) | **Yes** ✅ | Yes | Yes |
 | API input validation errors return 422 | Partial | **Full** ✅ | Full | Full |
 | Rate-limited 429 responses visible | No | **Yes** ✅ | Yes | Yes |
 | Estimation timeout enforced | No | **Yes (30 s)** ✅ | Yes | Yes (configurable) |
 | CORS headers on responses | No | **Yes** ✅ | Yes | Yes |
-| p95 quantum latency (epsilon=0.01) | Unmeasured | Unmeasured | Measured | Measured + cached |
-| Structured log lines per request | 0 | 0 | ≥3 with request_id | ≥3 with request_id |
-| Prometheus scrape endpoint | No | No | Yes | Yes |
+| p95 quantum latency (epsilon=0.01) | Unmeasured | Unmeasured | **Measured + cached** ✅ | Measured + cached |
+| Structured log lines per request | 0 | 0 | **≥3 with request_id** ✅ | ≥3 with request_id |
+| Prometheus scrape endpoint | No | No | **Yes** ✅ | Yes |
 | Docker image builds cleanly | No | No | No | Yes |
 | CI passes on PR | No | No | No | Yes |
 | mypy errors in core library | Unknown | Unknown | Unknown | 0 |
