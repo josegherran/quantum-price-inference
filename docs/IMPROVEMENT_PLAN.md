@@ -16,7 +16,7 @@ This plan organises improvements into three waves ordered by business value rela
 |---|---|---|---|
 | Wave 1 — Correctness, Security, Reliability | ✅ Complete | 1.1, 1.2, 1.3, 1.4, 1.5, 1.6 | — |
 | Wave 2 — Observability and Performance | ✅ Complete | 2.1, 2.2, 2.3, 2.4, 2.5 | — |
-| Wave 3 — Portability, Scalability, Maintainability | ⬜ Not started | — | 3.1, 3.2, 3.3, 3.4, 3.5 |
+| Wave 3 — Portability, Scalability, Maintainability | 🔧 In progress | 3.1 | 3.2, 3.3, 3.4, 3.5 |
 
 ### Wave 1 — Completed (all 6 items)
 
@@ -313,37 +313,25 @@ def test_threshold_circuit_requires_qiskit_finance(threshold_payoff, normal_mode
 
 ---
 
-#### 3.1 Dockerfile and docker-compose
+#### 3.1 Dockerfile and docker-compose ✅
 
 **Problem:** No container packaging. Deployment requires manual environment setup.
 
-**Fix:** Add a multi-stage `Dockerfile` using the official `python:3.12-slim` base. Use `uv` in the build stage to install dependencies, then copy only the virtualenv into the runtime stage.
+**Status:** ✅ Complete — image builds and passes smoke test.
 
-```dockerfile
-# Stage 1: build
-FROM python:3.12-slim AS builder
-RUN pip install uv
-WORKDIR /app
-COPY pyproject.toml uv.lock ./
-RUN uv sync --no-dev --frozen
+**Delivered:**
+- `deploy/Dockerfile` — multi-stage build (builder + runtime); Python 3.13-slim-bookworm; uv 0.11.3 pinned; non-root `qpi` user; `curl` HEALTHCHECK on `/health/live`; `QPI_WORKERS` env var controls uvicorn workers
+- `deploy/docker-compose.yml` — full stack (API + Prometheus v3.4.0 + Grafana v12.0.1); `env_file` wired to `deploy/.env`; API healthcheck gates Prometheus startup
+- `deploy/.env.example` — template for local secrets; `deploy/.env` is gitignored
+- `deploy/prometheus.yml` — scrape config with `rule_files` pointing at `alerts.yml`
+- `deploy/prometheus-alerts.yml` — 4 alert rules: `HighErrorRate`, `HighP95Latency`, `ApiDown`, `QuantumEndpointIdle`
+- `deploy/grafana/provisioning/datasources/prometheus.yml` — auto-wires Grafana → Prometheus
+- `deploy/grafana/provisioning/dashboards/dashboards.yml` — loads JSON dashboards from the same directory
+- `deploy/grafana/provisioning/dashboards/qpi-api.json` — pre-built dashboard: 5 stat panels (error rate, p95 latency, req/s, oracle calls/min, MC samples/min) + 4 time-series panels (req/s by endpoint, req/s by status, p50/p95/p99 latency, estimation metrics)
+- `Makefile` — all docker/deploy targets live (`docker-build`, `docker-run`, `docker-stop`, `docker-logs`, `deploy-up`, `deploy-down`, `deploy-logs`, `deploy-ps`); `ci` target chains lint + format-check + test
+- `.gitignore` — `deploy/.env` added
 
-# Stage 2: runtime
-FROM python:3.12-slim
-WORKDIR /app
-COPY --from=builder /app/.venv /app/.venv
-COPY quantum_price_inference/ ./quantum_price_inference/
-COPY api/ ./api/
-ENV PATH="/app/.venv/bin:$PATH"
-EXPOSE 8000
-HEALTHCHECK --interval=30s --timeout=5s CMD curl -f http://localhost:8000/health/live || exit 1
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
-```
-
-Note: the `HEALTHCHECK` references `/health/live` — implement Wave 2.4 first.
-
-Add a `docker-compose.yml` for local development that mounts the source tree and enables `--reload`.
-
-**Risk:** Low. Container is additive; existing `uv run` workflow is unchanged.
+**Verified:** `docker build` succeeds; `curl http://localhost:8000/health/live` returns `{"status":"alive"}` from the running container.
 
 ---
 
@@ -515,7 +503,7 @@ Wave 3 (portability/scalability) — blocked on Wave 1 ✅ (now unblocked)
 | p95 quantum latency (epsilon=0.01) | Unmeasured | Unmeasured | **Measured + cached** ✅ | Measured + cached |
 | Structured log lines per request | 0 | 0 | **≥3 with request_id** ✅ | ≥3 with request_id |
 | Prometheus scrape endpoint | No | No | **Yes** ✅ | Yes |
-| Docker image builds cleanly | No | No | No | Yes |
+| Docker image builds cleanly | No | No | No | **Yes** ✅ |
 | CI passes on PR | No | No | No | Yes |
 | mypy errors in core library | Unknown | Unknown | Unknown | 0 |
 
@@ -538,8 +526,8 @@ Wave 3 (portability/scalability) — blocked on Wave 1 ✅ (now unblocked)
 
 ## Conclusion
 
-The project has a strong conceptual foundation and a clean architecture. Wave 1 is complete — the system is now safe to expose beyond localhost, with rate limiting, CORS, input bounds, an estimation timeout, and full quantum engine test coverage.
+The project has a strong conceptual foundation and a clean architecture. Waves 1 and 2 are complete, and Wave 3.1 (Docker + Compose + Makefile) is done and verified.
 
-Wave 2 is the next priority. The structured logging and metrics work (2.1, 2.2) pays dividends immediately in any shared environment; the caching work (2.3) directly reduces cost and latency for the most common workshop use case (repeated calls with the same parameters). All Wave 2 items are unblocked.
+The system is now safe to expose beyond localhost (Wave 1), fully observable in a shared environment (Wave 2), and deployable as a container with a pre-built Grafana dashboard (Wave 3.1).
 
-Wave 3 makes the system portable and maintainable over time. The CI pipeline (3.2) is the highest-leverage item in the wave — once in place, it prevents regressions from all previous waves automatically. Wave 3 is now fully unblocked by the completion of Wave 1.
+The remaining Wave 3 items (3.2 CI, 3.3 env config, 3.4 async jobs, 3.5 mypy) make the system maintainable and scalable over time. The CI pipeline (3.2) is the highest-leverage next step — once in place, it prevents regressions from all previous waves automatically.

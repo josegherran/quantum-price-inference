@@ -1,0 +1,21 @@
+# =============================================================================
+# Prometheus scrape configuration for quantum-price-inference
+#
+# Scrape interval: 15 s — suitable for a demo or low-traffic deployment.
+# Increase to 60 s in production to reduce storage and CPU overhead.
+#
+# Alert rules are defined in prometheus-alerts.yml (loaded via rule_files).
+# =============================================================================
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - "alerts.yml"   # mounted at /etc/prometheus/alerts.yml by docker-compose
+
+scrape_configs:
+  - job_name: "qpi-api"
+    static_configs:
+      - targets: ["api:8000"]
+    metrics_path: "/metrics"

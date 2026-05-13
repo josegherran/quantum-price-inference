@@ -1,0 +1,16 @@
+# =============================================================================
+# Grafana dashboard provisioning
+# Loads all JSON dashboards from the same directory on startup.
+# =============================================================================
+
+apiVersion: 1
+
+providers:
+  - name: "QPI Dashboards"
+    orgId: 1
+    type: file
+    disableDeletion: true
+    updateIntervalSeconds: 30
+    allowUiUpdates: false
+    options:
+      path: /etc/grafana/provisioning/dashboards

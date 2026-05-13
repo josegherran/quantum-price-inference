@@ -1,0 +1,103 @@
+# =============================================================================
+# quantum-price-inference — Docker Compose
+#
+# Services:
+#   api         — FastAPI application (built from deploy/Dockerfile)
+#   prometheus  — scrapes /metrics from the API every 15 s
+#   grafana     — visualises Prometheus metrics (pre-wired datasource)
+#
+# Usage:
+#   docker compose -f deploy/docker-compose.yml up -d      # start detached
+#   docker compose -f deploy/docker-compose.yml down       # stop + remove
+#   docker compose -f deploy/docker-compose.yml logs -f    # tail all logs
+#
+# Or via Make (project root):
+#   make deploy-up
+#   make deploy-down
+#   make deploy-logs
+#
+# Credentials:
+#   Copy deploy/.env.example to deploy/.env and set QPI_GRAFANA_PASSWORD.
+#   The .env file is gitignored — never commit real passwords.
+#
+# Ports:
+#   8000  — API          http://localhost:8000/docs
+#   9090  — Prometheus   http://localhost:9090
+#   3001  — Grafana      http://localhost:3001  (admin / see .env)
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # API
+  # ---------------------------------------------------------------------------
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: quantum-price-inference:latest
+    container_name: qpi-api
+    ports:
+      - "8000:8000"
+    env_file:
+      # Copy deploy/.env.example → deploy/.env and customise before first run.
+      - path: .env
+        required: false   # compose still starts if .env is absent (uses defaults)
+    environment:
+      QPI_LOG_LEVEL: "${QPI_LOG_LEVEL:-INFO}"
+      QPI_LOG_JSON: "${QPI_LOG_JSON:-true}"
+      QPI_WORKERS: "${QPI_WORKERS:-2}"
+      # Expand for non-localhost deployments, e.g.:
+      # QPI_CORS_ORIGINS: '["https://your-domain.com"]'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/live"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Prometheus  (pinned to latest stable as of 2025-05)
+  # ---------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v3.4.0
+    container_name: qpi-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus-alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=7d"
+      - "--web.enable-lifecycle"   # allows POST /-/reload to hot-reload config
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Grafana  (pinned to latest stable as of 2025-05)
+  # ---------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:12.0.1
+    container_name: qpi-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: "${QPI_GRAFANA_PASSWORD:-changeme}"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  prometheus_data:
+  grafana_data:

@@ -38,7 +38,7 @@ Participants will:
 ## 1. Why Pricing Is About Probability (10 min)
 
 **Facilitator says:**
-> We don’t price based on what will happen – we price based on what *might* happen.
+> We don't price based on what will happen – we price based on what *might* happen.
 
 Key idea:
 
@@ -51,7 +51,7 @@ Fair Price = Expected Value = E[g(X)]
 
 **Example (non-financial):**
 
-- Tomorrow’s cloud cost varies
+- Tomorrow's cloud cost varies
 - SLA penalties may or may not occur
 - Usage volume is uncertain
 
@@ -122,9 +122,20 @@ Pricing with quantum computers always has **4 building blocks**:
 
 ---
 
-## 5. Live Demo – Observe, Don’t Code (25 min)
+## 5. Live Demo – Observe, Don't Code (25 min)
 
 **Facilitator runs prepared notebook** (participants watch & interpret).
+
+### Pre-flight check (do this before the session starts)
+
+Run the following in the project directory to ensure all notebook dependencies are installed and the correct kernel is available:
+
+```bash
+uv sync --extra notebook --extra dev
+uv run jupyter notebook
+```
+
+In the notebook UI, confirm the kernel shown in the top-right corner is **`python3`** (the project venv). If it shows a different kernel, switch via *Kernel → Change kernel → python3*. Skipping this step causes `ModuleNotFoundError: No module named 'matplotlib'` on the first cell.
 
 ### What to emphasize
 
