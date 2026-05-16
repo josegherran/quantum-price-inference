@@ -2,12 +2,13 @@
 
 ## Project Overview
 
-Quantum price inference simulation system. Two delivery interfaces:
+Quantum price inference simulation system. Three delivery interfaces:
 
 - **Jupyter Notebook** — researcher-facing demo for a 90-min workshop ([Quantum_Workshop_Facilitator_Script.md](Quantum_Workshop_Facilitator_Script.md))
+- **marimo App** — interactive Python app for live demos and parameter exploration
 - **REST API** — FastAPI service wrapping the same simulation logic
 
-See [README.md](README.md) for architecture, dependency table, and run commands.
+See [README.md](README.md) for architecture, dependency table, and run commands, including marimo app usage.
 
 ## Architecture
 
@@ -19,8 +20,10 @@ quantum_price_inference/   # core library (pure Python, no side effects)
 │  payoff.py               # LinearPayoff, ThresholdPayoff
 │  classical.py            # classical Monte Carlo engine (estimate / estimate_async)
 │  quantum.py              # quantum QAE engine (estimate / estimate_async)
-notebook/
-│  quantum_price_inference.ipynb   # 90-min workshop demo
+    notebook/
+    │  quantum_price_inference.ipynb         # 90-min workshop demo (Jupyter)
+    │  00_calculating_orangejuice_price_app.py   # marimo app: orange juice price demo
+    │  01_price_estimation_techniques_app.py    # marimo app: classical vs quantum comparison
 api/
 │  main.py                 # FastAPI app, lifespan, CORS middleware, rate-limit wiring
 │  limiter.py              # shared slowapi Limiter instance (avoids circular imports)

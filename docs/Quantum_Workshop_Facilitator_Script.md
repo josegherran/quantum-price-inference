@@ -11,7 +11,11 @@ Business, IT, Architecture, Innovation, Data, Product leaders (no finance or qua
 
 ---
 
-## Workshop Objective (Read aloud – 2 min)
+## Facilitator Note: Interactive Demo
+
+For the live demo section, you may use either the Jupyter notebook ([notebook/quantum_price_inference.ipynb](../notebook/quantum_price_inference.ipynb)) or the marimo app ([notebook/00_calculating_orangejuice_price_app.py](../notebook/00_calculating_orangejuice_price_app.py)) for a more interactive, real-time experience. The marimo app allows you to adjust parameters and instantly show the impact on classical and quantum price estimates.
+
+---
 
 > *Today we will see how pricing a product or service is really a probability problem – and how quantum computing offers a new way to estimate value under uncertainty.*
 

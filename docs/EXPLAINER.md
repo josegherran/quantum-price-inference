@@ -1,4 +1,14 @@
-# What Does This Project Do? 🤔
+
+# Interactive Demos: Jupyter & marimo
+
+You can explore the pricing simulation **live** using either:
+
+- The stepwise Jupyter notebook ([notebook/quantum_price_inference.ipynb](../notebook/quantum_price_inference.ipynb))
+- The interactive marimo app ([notebook/00_calculating_orangejuice_price_app.py](../notebook/00_calculating_orangejuice_price_app.py), [notebook/01_price_estimation_techniques_app.py](../notebook/01_price_estimation_techniques_app.py))
+
+The marimo app lets you adjust parameters and instantly see how classical and quantum price estimates change, with live plots and business-focused conclusions.
+
+## What Does This Project Do? 🤔
 
 ## Imagine You're Running a Lemonade Stand
 

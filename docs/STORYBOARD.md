@@ -14,6 +14,12 @@ Adapted from the explainer and full workshop into a concise, high-engagement sli
 | ➡️ | Transition / flow logic |
 | ⏱️ | Estimated time |
 
+## Interactive Demo Option
+
+For live presentations or stakeholder workshops, you can use the interactive marimo app ([notebook/00_calculating_orangejuice_price_app.py](../notebook/00_calculating_orangejuice_price_app.py)) to let the audience see how changing assumptions affects the fair price, in real time.
+
+---
+
 ## Presentation Goal
 
 Help non-technical stakeholders understand that pricing is an expected-value problem, see the difference between classical and quantum estimation, and leave with a business-ready mental model they can reuse.

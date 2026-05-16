@@ -29,6 +29,7 @@ notebook = [
     "ipykernel>=6.0",
     "pylatexenc>=2.10",       # circuit drawing with Qiskit
     "qiskit-finance>=0.4",   # pre-built distribution loading and payoff circuits
+    "marimo>=0.4",            # interactive Python notebooks
 ]
 dev = [
     "pytest>=8.0",

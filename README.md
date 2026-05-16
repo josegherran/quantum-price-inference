@@ -93,9 +93,29 @@ All Python dependencies are declared in [`pyproject.toml`](pyproject.toml):
 
 ---
 
+## Interactive Demos: Jupyter & marimo
+
+This project supports **two interactive demo modes** for exploring classical vs quantum price estimation:
+
+- **Jupyter Notebook**: Stepwise, annotated demo for workshops and research ([notebook/quantum_price_inference.ipynb](notebook/quantum_price_inference.ipynb))
+- **marimo App**: Live, parameterized Python apps with instant feedback and visualizations ([notebook/00_calculating_orangejuice_price_app.py](notebook/00_calculating_orangejuice_price_app.py), [notebook/01_price_estimation_techniques_app.py](notebook/01_price_estimation_techniques_app.py))
+
+### Run the marimo app
+
+```bash
+# Example: run the orange juice price demo
+uv run marimo run notebook/00_calculating_orangejuice_price_app.py
+# Or the classical vs quantum comparison
+uv run marimo run notebook/01_price_estimation_techniques_app.py
+```
+
+The marimo app will launch at [http://localhost:2718](http://localhost:2718) with interactive controls and live-updating plots. All business logic is shared with the Jupyter notebook for consistency.
+
+---
+
 ## Project Structure
 
-```
+```file
 quantum-price-inference/
 ├── quantum_price_inference/      # core library — pure Python, no side effects
 │   ├── _log.py                   # configure_logging(), JSON formatter, request-ID filter
@@ -315,7 +335,7 @@ The circuit is exported to **OpenQASM 2.0** and encoded as a `?code=` query para
 
 ## Makefile Reference
 
-```
+```list
 make help              show all targets
 make install           uv sync (core only)
 make install-dev       uv sync --extra dev
