@@ -47,6 +47,11 @@ import asyncio
 import functools
 import logging
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from quantum_price_inference.uncertainty import UncertaintyModel
+    from quantum_price_inference.payoff import PayoffFunction
 
 log = logging.getLogger(__name__)
 
@@ -81,13 +86,16 @@ class QuantumResult:
 
 @functools.lru_cache(maxsize=128)
 def _estimate_cached(
+    distribution_type: str,
     mu: float,
     sigma: float,
     num_qubits: int,
     low: float | None,
     high: float | None,
+    payoff_type: str,
     breakeven: float,
     slope: float,
+    threshold: float | None,
     max_value: float,
     epsilon: float,
     alpha: float,
@@ -96,17 +104,36 @@ def _estimate_cached(
 
     IQAE on ``StatevectorSampler`` is fully deterministic — the same parameters
     always produce the same result.  All parameters are scalars so they are
-    hashable and safe as cache keys.
+    hashable and safe as cache keys.  ``distribution_type`` and ``payoff_type``
+    are included so Normal and LogNormal (or Linear and Threshold) with identical
+    numeric parameters do not collide.
     """
-    from quantum_price_inference.uncertainty import NormalUncertaintyModel
-    from quantum_price_inference.payoff import LinearPayoff
+    from quantum_price_inference.uncertainty import (
+        NormalUncertaintyModel,
+        LogNormalUncertaintyModel,
+    )
+    from quantum_price_inference.payoff import LinearPayoff, ThresholdPayoff
 
-    model = NormalUncertaintyModel(mu=mu, sigma=sigma, num_qubits=num_qubits, low=low, high=high)
-    payoff = LinearPayoff(breakeven=breakeven, slope=slope, max_value=max_value)
+    if distribution_type == "lognormal":
+        model = LogNormalUncertaintyModel(
+            mu=mu, sigma=sigma, num_qubits=num_qubits, low=low, high=high
+        )
+    else:
+        model = NormalUncertaintyModel(
+            mu=mu, sigma=sigma, num_qubits=num_qubits, low=low, high=high
+        )
+
+    if payoff_type == "threshold":
+        payoff = ThresholdPayoff(threshold=threshold)  # type: ignore[arg-type]
+    else:
+        payoff = LinearPayoff(breakeven=breakeven, slope=slope, max_value=max_value)
+
     return _estimate_uncached(model, payoff, epsilon=epsilon, alpha=alpha)
 
 
-def _estimate_uncached(model, payoff, epsilon: float, alpha: float) -> QuantumResult:
+def _estimate_uncached(
+    model: UncertaintyModel, payoff: PayoffFunction, epsilon: float, alpha: float
+) -> QuantumResult:
     """Core IQAE implementation — no caching."""
     try:
         from qiskit_algorithms import EstimationProblem, IterativeAmplitudeEstimation  # type: ignore[import]
@@ -162,8 +189,8 @@ def _estimate_uncached(model, payoff, epsilon: float, alpha: float) -> QuantumRe
 
 
 def estimate(
-    model,
-    payoff,
+    model: UncertaintyModel,
+    payoff: PayoffFunction,
     epsilon: float = 0.01,
     alpha: float = 0.05,
 ) -> QuantumResult:
@@ -188,18 +215,27 @@ def estimate(
     """
     log.info("Quantum QAE: epsilon=%.4f  alpha=%.4f", epsilon, alpha)
 
-    # Route to the cached path when the model exposes real scalar attributes
-    # (i.e., it is a NormalUncertaintyModel + LinearPayoff, not a mock).
-    if hasattr(model, "mu") and hasattr(payoff, "breakeven"):
+    # Route to the cached path when the model/payoff expose real scalar attributes
+    # (not mocks). Determine type strings from the class name so we don't need to
+    # import the concrete classes here.
+    model_type = type(model).__name__
+    payoff_type = type(payoff).__name__
+    is_cacheable = hasattr(model, "mu") and hasattr(model, "sigma")
+    if is_cacheable:
         try:
+            distribution_type = "lognormal" if "LogNormal" in model_type else "normal"
+            p_type = "threshold" if "Threshold" in payoff_type else "linear"
             result = _estimate_cached(
+                distribution_type=distribution_type,
                 mu=float(model.mu),
                 sigma=float(model.sigma),
                 num_qubits=int(model.num_qubits),
                 low=float(model.low) if getattr(model, "low", None) is not None else None,
                 high=float(model.high) if getattr(model, "high", None) is not None else None,
-                breakeven=float(payoff.breakeven),
-                slope=float(payoff.slope),
+                payoff_type=p_type,
+                breakeven=float(getattr(payoff, "breakeven", 0.0)),
+                slope=float(getattr(payoff, "slope", 0.0)),
+                threshold=float(payoff.threshold) if hasattr(payoff, "threshold") else None,
                 max_value=float(getattr(payoff, "max_value", 1.0)),
                 epsilon=epsilon,
                 alpha=alpha,
@@ -225,8 +261,8 @@ def estimate(
 
 
 async def estimate_async(
-    model,
-    payoff,
+    model: UncertaintyModel,
+    payoff: PayoffFunction,
     epsilon: float = 0.01,
     alpha: float = 0.05,
 ) -> QuantumResult:

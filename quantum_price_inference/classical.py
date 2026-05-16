@@ -37,11 +37,42 @@ from __future__ import annotations
 import asyncio
 import functools
 import logging
+import math
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Callable, Optional
 
 import numpy as np
 
+if TYPE_CHECKING:
+    from quantum_price_inference.uncertainty import UncertaintyModel
+    from quantum_price_inference.payoff import PayoffFunction
+
 log = logging.getLogger(__name__)
+
+
+def _z_score(alpha: float) -> float:
+    """Return the z-score for a two-tailed CI at confidence level (1 - alpha).
+
+    Uses ``math.erfinv`` (Python ≥ 3.12) when available, falling back to
+    ``scipy.special.erfinv`` for earlier Python versions.  Both are exact;
+    no approximation is needed.
+    """
+    # math.erfinv added in Python 3.12 (PEP 697)
+    _erfinv: Optional[Callable[[float], float]] = getattr(math, "erfinv", None)
+    if _erfinv is None:
+        try:
+            from scipy.special import erfinv as _scipy_erfinv  # type: ignore[import-untyped]
+
+            _erfinv = _scipy_erfinv
+        except ImportError:
+            # Last-resort: Abramowitz & Stegun rational approximation (max error 4.5e-4)
+            # Only reached in environments with neither Python 3.12 nor scipy.
+            t = 1.0 - alpha
+            u = math.log(1.0 - t * t)
+            c = 2.515517 + 0.802853 * u + 0.010328 * u * u
+            d = 1.0 + 1.432788 * u + 0.189269 * u * u + 0.001308 * u * u * u
+            return c / d
+    return math.sqrt(2.0) * _erfinv(1.0 - alpha)
 
 
 # ---------------------------------------------------------------------------
@@ -83,6 +114,7 @@ def _estimate_cached(
     max_value: float,
     n_samples: int,
     seed: int,
+    alpha: float,
 ) -> ClassicalResult:
     """LRU-cached implementation for deterministic (seeded) runs.
 
@@ -95,10 +127,16 @@ def _estimate_cached(
 
     model = NormalUncertaintyModel(mu=mu, sigma=sigma, num_qubits=num_qubits, low=low, high=high)
     payoff = LinearPayoff(breakeven=breakeven, slope=slope, max_value=max_value)
-    return _estimate_uncached(model, payoff, n_samples=n_samples, seed=seed)
+    return _estimate_uncached(model, payoff, n_samples=n_samples, seed=seed, alpha=alpha)
 
 
-def _estimate_uncached(model, payoff, n_samples: int, seed: int | None) -> ClassicalResult:
+def _estimate_uncached(
+    model: UncertaintyModel,
+    payoff: PayoffFunction,
+    n_samples: int,
+    seed: int | None,
+    alpha: float = 0.05,
+) -> ClassicalResult:
     """Core Monte Carlo implementation — no caching."""
     rng = np.random.default_rng(seed)
     x_values, probs = model.samples()
@@ -111,7 +149,7 @@ def _estimate_uncached(model, payoff, n_samples: int, seed: int | None) -> Class
     mean = float(g_values.mean())
     std = float(g_values.std())
     std_error = std / np.sqrt(n_samples)
-    half_width = 1.96 * std_error  # 95 % CI
+    half_width = _z_score(alpha) * std_error
 
     return ClassicalResult(
         value=mean,
@@ -127,10 +165,11 @@ def _estimate_uncached(model, payoff, n_samples: int, seed: int | None) -> Class
 
 
 def estimate(
-    model,
-    payoff,
+    model: UncertaintyModel,
+    payoff: PayoffFunction,
     n_samples: int = 10_000,
     seed: int | None = None,
+    alpha: float = 0.05,
 ) -> ClassicalResult:
     """Estimate E[g(X)] via classical Monte Carlo sampling.
 
@@ -141,16 +180,17 @@ def estimate(
         seed:      Optional random seed for reproducibility.  When provided,
                    the result is served from an in-process LRU cache on
                    repeated calls with identical parameters.
+        alpha:     Significance level for the confidence interval (default 0.05
+                   → 95 % CI).  Consistent with the quantum endpoint's ``alpha``.
 
     Returns:
-        A :class:`ClassicalResult` with mean, std error, and 95 % CI.
+        A :class:`ClassicalResult` with mean, std error, and ``(1 - alpha)`` CI.
     """
-    log.info("Classical MC: drawing %d samples (seed=%s)", n_samples, seed)
+    log.info("Classical MC: drawing %d samples (seed=%s alpha=%.2f)", n_samples, seed, alpha)
 
     # Route to the cached path only when the call is deterministic and the
-    # model/payoff are real NormalUncertaintyModel + LinearPayoff instances
-    # (not mocks). ThresholdPayoff has no `breakeven` attribute.
-    if seed is not None and hasattr(model, "mu") and hasattr(payoff, "breakeven"):
+    # model/payoff are real instances with scalar attributes (not mocks).
+    if seed is not None and hasattr(model, "mu"):
         try:
             result = _estimate_cached(
                 mu=float(model.mu),
@@ -158,17 +198,18 @@ def estimate(
                 num_qubits=int(model.num_qubits),
                 low=float(model.low) if getattr(model, "low", None) is not None else None,
                 high=float(model.high) if getattr(model, "high", None) is not None else None,
-                breakeven=float(payoff.breakeven),
-                slope=float(payoff.slope),
+                breakeven=float(getattr(payoff, "breakeven", 0.0)),
+                slope=float(getattr(payoff, "slope", 0.0)),
                 max_value=float(getattr(payoff, "max_value", 1.0)),
                 n_samples=n_samples,
                 seed=seed,
+                alpha=alpha,
             )
         except (TypeError, ValueError):
             # Attributes are not real scalars (e.g. mocks in tests) — fall through.
-            result = _estimate_uncached(model, payoff, n_samples=n_samples, seed=seed)
+            result = _estimate_uncached(model, payoff, n_samples=n_samples, seed=seed, alpha=alpha)
     else:
-        result = _estimate_uncached(model, payoff, n_samples=n_samples, seed=seed)
+        result = _estimate_uncached(model, payoff, n_samples=n_samples, seed=seed, alpha=alpha)
 
     log.info(
         "Classical MC result: value=%.6f  std_error=%.6f  CI=(%.6f, %.6f)",
@@ -185,14 +226,15 @@ def estimate(
 
 
 async def estimate_async(
-    model,
-    payoff,
+    model: UncertaintyModel,
+    payoff: PayoffFunction,
     n_samples: int = 10_000,
     seed: int | None = None,
+    alpha: float = 0.05,
 ) -> ClassicalResult:
     """Async wrapper around :func:`estimate`.
 
     Runs the CPU-bound sampling in a thread pool so the event loop is never
     blocked.  Use this inside FastAPI route handlers and async notebook cells.
     """
-    return await asyncio.to_thread(estimate, model, payoff, n_samples, seed)
+    return await asyncio.to_thread(estimate, model, payoff, n_samples, seed, alpha)

@@ -54,9 +54,8 @@ format: ## Auto-format with ruff
 format-check: ## Check formatting without modifying files (CI mode)
 	uv run ruff format --check .
 
-typecheck: ## Run mypy type checker (Wave 3.5 — add mypy to dev deps first)
-	@echo "Wave 3.5: uv run mypy quantum_price_inference/ api/"
-	@echo "          Add mypy>=1.10 to [project.optional-dependencies] dev in pyproject.toml."
+typecheck: ## Run mypy static type checker
+	uv run mypy quantum_price_inference/ api/
 
 # ---------------------------------------------------------------------------
 # Testing
@@ -122,7 +121,7 @@ deploy-ps: ## Show status of all compose services
 # CI — chains all quality checks (mirrors GitHub Actions)
 # ---------------------------------------------------------------------------
 
-ci: lint format-check test ## Run lint + format-check + full test suite
+ci: lint format-check typecheck test ## Run lint + format-check + typecheck + full test suite
 
 # ---------------------------------------------------------------------------
 # Cleanup

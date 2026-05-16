@@ -319,3 +319,217 @@ def test_metrics_endpoint_contains_http_requests():
 
     response = anyio.run(check)
     assert "http_requests_total" in response.text or "http_request" in response.text
+
+
+# ---------------------------------------------------------------------------
+# 4.4 — /v1 versioning prefix
+# ---------------------------------------------------------------------------
+
+
+def test_v1_classical_endpoint_returns_200(estimate_payload):
+    async def check():
+        return await _post("/v1/estimate/classical", estimate_payload)
+
+    response = anyio.run(check)
+    assert response.status_code == 200
+
+
+def test_v1_quantum_endpoint_returns_200(estimate_payload):
+    qiskit_finance = pytest.importorskip("qiskit_finance")  # noqa: F841
+
+    async def check():
+        return await _post("/v1/estimate/quantum", estimate_payload, "epsilon=0.05")
+
+    response = anyio.run(check)
+    assert response.status_code == 200
+
+
+def test_legacy_classical_endpoint_still_works(estimate_payload):
+    """Un-prefixed legacy route must remain available for one release cycle."""
+
+    async def check():
+        return await _post("/estimate/classical", estimate_payload)
+
+    response = anyio.run(check)
+    assert response.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# 4.1 — LogNormal distribution type via API
+# ---------------------------------------------------------------------------
+
+
+def test_classical_lognormal_distribution_returns_200():
+    payload = {
+        "uncertainty": {"distribution_type": "lognormal", "mu": 4.6, "sigma": 0.3, "num_qubits": 3},
+        "payoff": {"breakeven": 80.0, "slope": 0.02},
+    }
+
+    async def check():
+        return await _post("/v1/estimate/classical", payload, "n_samples=1000&seed=0")
+
+    response = anyio.run(check)
+    assert response.status_code == 200
+    assert 0.0 <= response.json()["value"] <= 1.0
+
+
+def test_classical_lognormal_value_differs_from_normal():
+    """LogNormal and Normal with domain-appropriate params produce different estimates."""
+    payoff = {"breakeven": 80.0, "slope": 0.02}
+
+    async def check():
+        # Normal: mu=100, sigma=15 — typical cost distribution
+        r_normal = await _post(
+            "/v1/estimate/classical",
+            {
+                "uncertainty": {
+                    "distribution_type": "normal",
+                    "mu": 100.0,
+                    "sigma": 15.0,
+                    "num_qubits": 3,
+                },
+                "payoff": payoff,
+            },
+            "n_samples=5000&seed=7",
+        )
+        # LogNormal: same domain (support ~55–200) but right-skewed
+        r_lognormal = await _post(
+            "/v1/estimate/classical",
+            {
+                "uncertainty": {
+                    "distribution_type": "lognormal",
+                    "mu": 4.6,
+                    "sigma": 0.3,
+                    "num_qubits": 3,
+                },
+                "payoff": payoff,
+            },
+            "n_samples=5000&seed=7",
+        )
+        return r_normal, r_lognormal
+
+    r_normal, r_lognormal = anyio.run(check)
+    assert r_normal.status_code == 200
+    assert r_lognormal.status_code == 200
+    assert r_normal.json()["value"] != r_lognormal.json()["value"]
+
+
+def test_classical_invalid_distribution_type_returns_422(estimate_payload):
+    bad = {
+        **estimate_payload,
+        "uncertainty": {**estimate_payload["uncertainty"], "distribution_type": "uniform"},
+    }
+
+    async def check():
+        return await _post("/v1/estimate/classical", bad)
+
+    response = anyio.run(check)
+    assert response.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# 4.2 — Threshold payoff type via API
+# ---------------------------------------------------------------------------
+
+
+def test_classical_threshold_payoff_returns_200():
+    payload = {
+        "uncertainty": {"mu": 100.0, "sigma": 15.0, "num_qubits": 3},
+        "payoff": {"payoff_type": "threshold", "breakeven": 85.0, "threshold": 100.0},
+    }
+
+    async def check():
+        return await _post("/v1/estimate/classical", payload, "n_samples=5000&seed=0")
+
+    response = anyio.run(check)
+    assert response.status_code == 200
+    # Threshold payoff returns a probability in [0, 1]
+    assert 0.0 <= response.json()["value"] <= 1.0
+
+
+def test_classical_threshold_payoff_missing_threshold_returns_422():
+    payload = {
+        "uncertainty": {"mu": 100.0, "sigma": 15.0, "num_qubits": 3},
+        "payoff": {"payoff_type": "threshold", "breakeven": 85.0},
+    }
+
+    async def check():
+        return await _post("/v1/estimate/classical", payload)
+
+    response = anyio.run(check)
+    assert response.status_code == 422
+
+
+def test_classical_threshold_differs_from_linear():
+    """Threshold payoff estimate should differ from linear payoff estimate."""
+    uncertainty = {"mu": 100.0, "sigma": 15.0, "num_qubits": 3}
+
+    async def check():
+        r_linear = await _post(
+            "/v1/estimate/classical",
+            {
+                "uncertainty": uncertainty,
+                "payoff": {"payoff_type": "linear", "breakeven": 85.0, "slope": 0.02},
+            },
+            "n_samples=5000&seed=42",
+        )
+        r_threshold = await _post(
+            "/v1/estimate/classical",
+            {
+                "uncertainty": uncertainty,
+                "payoff": {"payoff_type": "threshold", "breakeven": 85.0, "threshold": 100.0},
+            },
+            "n_samples=5000&seed=42",
+        )
+        return r_linear, r_threshold
+
+    r_linear, r_threshold = anyio.run(check)
+    assert r_linear.status_code == 200
+    assert r_threshold.status_code == 200
+    assert r_linear.json()["value"] != r_threshold.json()["value"]
+
+
+# ---------------------------------------------------------------------------
+# 4.3 — Consistent alpha parameter on classical endpoint
+# ---------------------------------------------------------------------------
+
+
+def test_classical_alpha_widens_ci_at_lower_confidence(estimate_payload):
+    """Lower confidence (higher alpha) should produce a narrower CI."""
+
+    async def check():
+        r_95 = await _post(
+            "/v1/estimate/classical", estimate_payload, "n_samples=5000&seed=1&alpha=0.05"
+        )
+        r_50 = await _post(
+            "/v1/estimate/classical", estimate_payload, "n_samples=5000&seed=1&alpha=0.50"
+        )
+        return r_95, r_50
+
+    r_95, r_50 = anyio.run(check)
+    assert r_95.status_code == 200
+    assert r_50.status_code == 200
+    ci_95 = r_95.json()["confidence_interval"]
+    ci_50 = r_50.json()["confidence_interval"]
+    width_95 = ci_95["upper"] - ci_95["lower"]
+    width_50 = ci_50["upper"] - ci_50["lower"]
+    assert width_95 > width_50
+
+
+def test_classical_invalid_alpha_returns_422(estimate_payload):
+    async def check():
+        return await _post("/v1/estimate/classical", estimate_payload, "alpha=0.99")
+
+    response = anyio.run(check)
+    assert response.status_code == 422
+
+
+def test_quantum_endpoint_also_accepts_alpha(estimate_payload):
+    """Verify quantum endpoint still accepts alpha (regression guard for 4.3)."""
+    qiskit_finance = pytest.importorskip("qiskit_finance")  # noqa: F841
+
+    async def check():
+        return await _post("/v1/estimate/quantum", estimate_payload, "epsilon=0.05&alpha=0.10")
+
+    response = anyio.run(check)
+    assert response.status_code == 200

@@ -43,6 +43,16 @@ class UncertaintyModel(Protocol):
     """Structural interface for all uncertainty models."""
 
     @property
+    def mu(self) -> float:
+        """Mean of the distribution (log-space for LogNormal)."""
+        ...
+
+    @property
+    def sigma(self) -> float:
+        """Standard deviation (log-space for LogNormal)."""
+        ...
+
+    @property
     def num_qubits(self) -> int:
         """Number of qubits used to discretise the distribution."""
         ...
@@ -57,7 +67,7 @@ class UncertaintyModel(Protocol):
         """Upper bound of the discretised support."""
         ...
 
-    def circuit(self):  # -> QuantumCircuit
+    def circuit(self) -> object:
         """Return the Qiskit circuit that loads the distribution."""
         ...
 
@@ -118,7 +128,7 @@ class NormalUncertaintyModel:
     # Circuit encoding (requires qiskit-finance)
     # ------------------------------------------------------------------
 
-    def circuit(self):
+    def circuit(self) -> object:
         """Return a Qiskit circuit that loads the Normal distribution.
 
         Requires the ``notebook`` extra (``qiskit-finance``).
@@ -215,7 +225,7 @@ class LogNormalUncertaintyModel:
             self.high,
         )
 
-    def circuit(self):
+    def circuit(self) -> object:
         """Return a Qiskit circuit that loads the Log-Normal distribution.
 
         Requires the ``notebook`` extra (``qiskit-finance``).

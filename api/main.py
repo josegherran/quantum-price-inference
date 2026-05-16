@@ -11,6 +11,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from quantum_price_inference import configure_logging
+from api.config import settings
 from api.limiter import limiter
 from api.middleware import RequestIDMiddleware
 from api.routes import classical, quantum
@@ -18,7 +19,7 @@ from api.routes import classical, quantum
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    configure_logging(level="INFO")
+    configure_logging(level=settings.log_level, json=settings.log_json)
     yield
 
 
@@ -41,15 +42,10 @@ app = FastAPI(
 # Request ID — must be first so all downstream middleware and handlers see it.
 app.add_middleware(RequestIDMiddleware)
 
-# CORS — restrictive by default; expand allow_origins for production deployments.
+# CORS — origins read from QPI_CORS_ORIGINS; restrictive localhost defaults.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:8888",  # Jupyter notebook default port
-        "http://localhost:3000",  # local frontend dev server
-        "http://127.0.0.1:8888",
-        "http://127.0.0.1:3000",
-    ],
+    allow_origins=settings.cors_origins,
     allow_methods=["GET", "POST"],
     allow_headers=["Content-Type"],
 )
@@ -70,10 +66,15 @@ Instrumentator(
 ).instrument(app).expose(app, include_in_schema=False)
 
 # ---------------------------------------------------------------------------
-# Routers
+# Routers — v1 (canonical) + legacy un-prefixed aliases
 # ---------------------------------------------------------------------------
-app.include_router(classical.router)
-app.include_router(quantum.router)
+app.include_router(classical.router, prefix="/v1")
+app.include_router(quantum.router, prefix="/v1")
+
+# Legacy routes kept for one release cycle so existing clients do not break.
+# They are excluded from the OpenAPI schema to discourage new usage.
+app.include_router(classical.router, prefix="", include_in_schema=False)
+app.include_router(quantum.router, prefix="", include_in_schema=False)
 
 
 # ---------------------------------------------------------------------------

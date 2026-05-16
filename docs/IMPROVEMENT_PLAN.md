@@ -2,11 +2,29 @@
 
 ## Executive Summary
 
-`quantum-price-inference` is a well-structured simulation system with a clean 4-block architecture, a clear separation between the core library and its two delivery interfaces (REST API and Jupyter Notebook), and a solid foundation of unit tests. The codebase follows its own conventions consistently and is easy to reason about.
+`quantum-price-inference` is a well-structured simulation system with a clean 4-block architecture,
+clear separation between the core library and its three delivery interfaces (REST API, Jupyter,
+marimo), and a solid foundation of 90 tests. Waves 1 (security/correctness), 2 (observability/
+performance), and 3.1 (Docker + Compose + Grafana) are complete. The system is now safe to
+expose beyond localhost, fully observable, and deployable as a container with a pre-built
+Grafana dashboard.
 
-The gaps are not architectural — they are operational. The system has no input validation beyond Pydantic's type checks, no rate limiting, no request-level observability, no caching for expensive quantum simulations, no container packaging, and no CI pipeline. The quantum endpoint also has a hard dependency on `qiskit-finance` that is not surfaced clearly at startup, and the `composer.py` module violates the import-safety rule by importing `qiskit` at module level.
+The remaining gaps fall into four themes:
 
-This plan organises improvements into three waves ordered by business value relative to implementation effort. Wave 1 addresses correctness and security gaps that affect any production deployment. Wave 2 adds the observability and performance improvements that make the system operable at scale. Wave 3 covers portability, scalability, and long-term maintainability.
+1. **Automation** (Wave 3): No CI pipeline, no environment-based config, no async job pattern,
+   no mypy enforcement — the system requires manual process for every quality gate.
+2. **API feature completeness** (Wave 4): Both route handlers hardcode `NormalUncertaintyModel +
+   LinearPayoff`, silently ignoring `LogNormalUncertaintyModel` and `ThresholdPayoff` that already
+   exist in the library. The classical CI level is hardcoded at 95 % while the quantum endpoint
+   exposes a configurable `alpha`. There is no API versioning.
+3. **Production hardening** (Wave 5): No authentication, in-process LRU caches fragment across
+   workers when `QPI_WORKERS > 1`, no Qiskit 3.0 migration path, no Kubernetes manifests.
+4. **Qiskit 3.0 migration** (Wave 5): `LinearAmplitudeFunction`, `BlueprintCircuit`,
+   `GroverOperator`, and `MCXGate` are deprecated in Qiskit 2.x and will be removed in 3.0.
+   The migration window is closing.
+
+This plan extends the original three waves with two additional waves (4 and 5) ordered by business
+value relative to implementation effort.
 
 ---
 
@@ -17,31 +35,8 @@ This plan organises improvements into three waves ordered by business value rela
 | Wave 1 — Correctness, Security, Reliability | ✅ Complete | 1.1, 1.2, 1.3, 1.4, 1.5, 1.6 | — |
 | Wave 2 — Observability and Performance | ✅ Complete | 2.1, 2.2, 2.3, 2.4, 2.5 | — |
 | Wave 3 — Portability, Scalability, Maintainability | 🔧 In progress | 3.1 | 3.2, 3.3, 3.4, 3.5 |
-
-### Wave 1 — Completed (all 6 items)
-
-| Item | Description | Delivered |
-|---|---|---|
-| 1.1 | Fix `composer.py` module-level import violation | All `qiskit` imports moved inside functions; module is now import-safe |
-| 1.2 | Add API-layer input bounds | `n_samples` capped 100–100 000; `epsilon` bounded 0.001–0.1; `alpha` bounded 0.01–0.5 via `fastapi.Query` |
-| 1.3 | Add rate limiting | `slowapi>=0.1.9` added; 30 req/min on `/estimate/classical`, 10 req/min on `/estimate/quantum`; shared `api/limiter.py` avoids circular imports |
-| 1.4 | Add CORS policy | `CORSMiddleware` added with restrictive localhost defaults; operators expand `allow_origins` for production |
-| 1.5 | Add estimation timeout | `asyncio.wait_for(..., timeout=30.0)` wraps quantum estimation; returns HTTP 504 with actionable message on timeout |
-| 1.6 | Add missing quantum engine tests | `tests/test_quantum.py` created with 14 tests: 2 dataclass unit tests, 2 `ImportError` unit tests, 10 integration tests (auto-skipped without `qiskit-finance`) |
-
-**Test suite after Wave 1:** 56 passed, 0 failed. Ruff clean on all source files.
-
-### Wave 2 — Completed (all 5 items)
-
-| Item | Description | Delivered |
-|---|---|---|
-| 2.1 | Structured logging with request IDs | `_log.py` extended with `_RequestIDFilter`, `_JsonFormatter`, `request_id_var` ContextVar, and `json: bool` param on `configure_logging`; new `api/middleware.py` with `RequestIDMiddleware` that assigns UUID4 per request, echoes client-supplied `X-Request-ID`, and resets the ContextVar after each request |
-| 2.2 | Prometheus metrics endpoint | `prometheus-fastapi-instrumentator>=7.0` added; `Instrumentator` wired in `api/main.py` lifespan; `/metrics` exposed; custom `classical_samples_total` and `quantum_oracle_calls_total` counters added to route handlers |
-| 2.3 | Result caching for deterministic simulations | `functools.lru_cache(maxsize=256)` on `_estimate_cached` in `classical.py` (keyed on all scalar params + seed; bypassed when seed is None or payoff has no `breakeven`); `lru_cache(maxsize=128)` on `_estimate_cached` in `quantum.py` (IQAE on StatevectorSampler is fully deterministic; keyed on all scalar params); both guard against mock/non-scalar attributes with try/except |
-| 2.4 | `/health` liveness vs readiness split | `/health/live` (always 200 if process running) and `/health/ready` (checks qiskit, qiskit_algorithms, qiskit_finance importability) added; legacy `/health` preserved for backward compatibility |
-| 2.5 | Expanded test coverage | `ThresholdPayoff.circuit()` tested (2 tests); `LinearPayoff.circuit()` tested (2 tests); `LogNormalUncertaintyModel` parity tests added (4 new, now 8 total matching Normal); `tests/test_composer.py` created (9 tests: 3 import-safety + 6 integration); API quantum endpoint tested (6 tests); health split tested (3 tests); request ID header tested (2 tests); cache behaviour tested (4 tests); `/metrics` tested (2 tests) |
-
-**Test suite after Wave 2:** 90 passed, 0 failed. Ruff clean on all source files.
+| Wave 4 — API Feature Completeness | ✅ Complete | 4.1, 4.2, 4.3, 4.4 | — |
+| Wave 5 — Production Hardening | 📋 Planned | — | 5.1, 5.2, 5.3, 5.4 |
 
 ---
 
@@ -49,41 +44,50 @@ This plan organises improvements into three waves ordered by business value rela
 
 ### What works well
 
-- Clean layered architecture: `quantum_price_inference/` is a pure library with no side effects; API and notebook are thin consumers.
-- Async pattern is applied consistently: every engine exposes both `estimate` and `estimate_async`; route handlers are `async def` and call the `_async` variant.
-- Logging is correctly deferred: modules declare `log = logging.getLogger(__name__)` at module level; `configure_logging()` is called once in the lifespan.
-- Pydantic schemas enforce basic type constraints (`sigma > 0`, `slope > 0`, `num_qubits` in `[1, 8]`).
-- ~~`composer.py` imports `qiskit` at module level~~ — **fixed in 1.1**.
-- ~~No `tests/test_quantum.py`~~ — **fixed in 1.6**; 14 tests covering the quantum engine.
-- ~~No rate limiting, no CORS, no input bounds, no estimation timeout~~ — **fixed in 1.2–1.5**.
+- Clean layered architecture: `quantum_price_inference/` is a pure library; API and notebooks are
+  thin consumers.
+- Async pattern applied consistently: every engine exposes both `estimate` and `estimate_async`;
+  route handlers are `async def` and call the `_async` variant.
+- Logging correctly deferred: modules declare `log = logging.getLogger(__name__)` at module level;
+  `configure_logging()` is called once in the lifespan.
+- LRU caching in both engines: quantum always cached (deterministic); classical cached when `seed`
+  is provided.
+- Full observability stack: structured JSON logs, per-request `X-Request-ID`, Prometheus counters,
+  pre-built Grafana dashboard with 9 panels.
+- Container packaging: multi-stage Docker image, docker-compose with Prometheus + Grafana, alert
+  rules, `deploy/.env.example`.
 
 ### Remaining gaps by quality attribute
 
-| Attribute | Remaining Gap | Wave |
+| Attribute | Gap | Wave |
 |---|---|---|
-| **Observability** | Logs go to stderr with no structured format; no request IDs; no latency metrics; no Prometheus/OpenTelemetry integration; no `/metrics` endpoint; no tracing spans around estimation calls. | 2 |
-| **Performance** | Quantum and classical estimation are re-run on every request with no caching; identical parameter tuples always produce the same result — deterministic and cacheable. | 2 |
-| **Availability** | Single `/health` endpoint conflates liveness and readiness; Kubernetes and load balancers need both. | 2 |
-| **Maintainability** | `ThresholdPayoff.circuit()` is not tested; `LogNormalUncertaintyModel` has only 4 tests vs 8 for `NormalUncertaintyModel`; no test for `composer_url` or QASM export; API quantum endpoint not tested. | 2 |
-| **Portability** | No `Dockerfile`; no `docker-compose.yml`; no container health check; deployment requires manual `uv sync`. | 3 |
-| **Scalability** | Single-process `uvicorn` with no worker configuration guidance; no queue or job system for long-running quantum jobs. | 3 |
-| **Maintainability** | `mypy` cache exists but mypy is not in dev deps and not enforced anywhere; `estimate()` parameters in `classical.py` and `quantum.py` are untyped. | 3 |
-| **Cost** | Configuration (log level, CORS origins, rate limits, timeout) is hardcoded; changing any value requires a code edit. | 3 |
+| **Maintainability** | No CI pipeline — all quality gates (lint, format, tests) are manual. | 3 |
+| **Cost** | Config (log level, CORS, rate limits, timeout) is hardcoded; changing requires a code edit. | 3 |
+| **Scalability** | No async job pattern for long-running quantum jobs; clients hold HTTP connections open for up to 30 s. | 3 |
+| **Maintainability** | `mypy` not in dev deps and not enforced; `estimate()` parameters in `classical.py` and `quantum.py` are untyped. | 3 |
+| **Maintainability** | API route handlers hardcode `NormalUncertaintyModel + LinearPayoff`; `LogNormalUncertaintyModel` and `ThresholdPayoff` are inaccessible via the API despite existing in the library. | 4 |
+| **Maintainability** | Classical endpoint CI is hardcoded at 95 % (1.96 × stderr); quantum endpoint exposes configurable `alpha`. Inconsistent interfaces. | 4 |
+| **Maintainability** | No API versioning — any breaking schema change breaks all existing clients. | 4 |
+| **Observability** | No OpenTelemetry tracing spans around estimation calls — Prometheus shows rates/latency but not circuit depth or IQAE iteration count per span. | 4 |
+| **Security** | No authentication — any caller can hit the API; rate limiting constrains frequency but does not identify or authorize callers. | 5 |
+| **Scalability** | In-process LRU caches fragment across workers when `QPI_WORKERS > 1` — the same parameter tuple may be recomputed N times on an N-worker deployment. | 5 |
+| **Maintainability** | `LinearAmplitudeFunction`, `BlueprintCircuit`, `GroverOperator`, and `MCXGate` are deprecated in Qiskit 2.x. No migration plan before Qiskit 3.0 removal. | 5 |
+| **Portability** | No Kubernetes manifests (Deployment, Service, HPA, ConfigMap) — only docker-compose is provided. | 5 |
 
 ---
 
 ## Quality Characteristics Matrix
 
-| Characteristic | Baseline (1–5) | After Wave 1 | Wave 2 Target | Wave 3 Target |
-|---|---|---|---|---|
-| Security | 2 | **4** ✅ | 4 | 4 |
-| Availability | 2 | **3** ✅ | **4** ✅ | 4 |
-| Performance | 2 | 2 | **4** ✅ | 4 |
-| Observability | 1 | 1 | **4** ✅ | 4 |
-| Maintainability | 3 | **4** ✅ | **4** ✅ | 5 |
-| Portability | 1 | 1 | 1 | 4 |
-| Scalability | 2 | 2 | 2 | 3 |
-| Cost | 2 | **3** ✅ | **4** ✅ | 4 |
+| Characteristic | Baseline (1–5) | Wave 1 | Wave 2 | Wave 3 | Wave 4 Target | Wave 5 Target |
+|---|---|---|---|---|---|---|
+| Security | 2 | **4** ✅ | 4 | 4 | 4 | **5** |
+| Availability | 2 | **3** ✅ | **4** ✅ | 4 | 4 | **5** |
+| Performance | 2 | 2 | **4** ✅ | 4 | 4 | **5** |
+| Observability | 1 | 1 | **4** ✅ | 4 | **5** | 5 |
+| Maintainability | 3 | **4** ✅ | **4** ✅ | **5** | **5** | 5 |
+| Portability | 1 | 1 | 1 | **4** ✅ | 4 | **5** |
+| Scalability | 2 | 2 | 2 | **3** | 3 | **4** |
+| Cost | 2 | **3** ✅ | **4** ✅ | **5** | 5 | 5 |
 
 ---
 
@@ -94,261 +98,72 @@ This plan organises improvements into three waves ordered by business value rela
 ### Wave 1 — Correctness, Security, and Baseline Reliability ✅ Complete
 
 **Goal:** Make the system safe to expose beyond localhost.
-
 **Actual effort:** ~1 day. All 6 items delivered; 56 tests passing.
 
----
-
-#### 1.1 Fix `composer.py` module-level import violation ✅
-
-**Problem:** `composer.py` imported `qiskit` and `qiskit.qasm2` at the top of the file, breaking the core library's import-safety guarantee in environments without qiskit.
-
-**Delivered:** All `qiskit` imports moved inside `_composer_compatible_circuit`, `circuit_to_qasm2`, and `composer_url`. Each raises a clear `ImportError` with an install hint. Module is now safe to import without qiskit installed, matching the pattern in `payoff.py` and `uncertainty.py`. Function signatures changed from `circuit: QuantumCircuit` to untyped `circuit` to avoid the module-level `QuantumCircuit` import.
-
----
-
-#### 1.2 Add API-layer input bounds ✅
-
-**Problem:** The API accepted `n_samples` up to any integer and `epsilon` down to any float, allowing a caller to trivially exhaust CPU.
-
-**Delivered:** Both route handlers now use `fastapi.Query` with `ge`/`le` constraints. Bounds are documented in the OpenAPI description string.
-
-- `n_samples`: 100–100 000 (classical)
-- `epsilon`: 0.001–0.1 (quantum)
-- `alpha`: 0.01–0.5 (quantum)
-
-Out-of-range values return HTTP 422 automatically via FastAPI validation.
+| Item | Description | Delivered |
+|---|---|---|
+| 1.1 | Fix `composer.py` module-level import violation | All `qiskit` imports moved inside functions |
+| 1.2 | Add API-layer input bounds | `n_samples` 100–100 000; `epsilon` 0.001–0.1; `alpha` 0.01–0.5 via `fastapi.Query` |
+| 1.3 | Add rate limiting | `slowapi` 30 req/min classical, 10 req/min quantum; shared `api/limiter.py` |
+| 1.4 | Add CORS policy | `CORSMiddleware` with restrictive localhost defaults |
+| 1.5 | Add estimation timeout | `asyncio.wait_for(timeout=30.0)` → HTTP 504 on timeout |
+| 1.6 | Add missing quantum engine tests | `tests/test_quantum.py` with 14 tests |
 
 ---
 
-#### 1.3 Add rate limiting ✅
+### Wave 2 — Observability and Performance ✅ Complete
 
-**Problem:** No rate limiting. The quantum endpoint is CPU-intensive; a single client could saturate the server.
+**Goal:** Make the system operable in a shared environment.
+**Actual effort:** ~3 days. All 5 items delivered; 90 tests passing.
 
-**Delivered:** `slowapi>=0.1.9` added as a core dependency. A shared `api/limiter.py` module holds the `Limiter` instance to avoid circular imports between `main.py` and the route modules. Limits applied per client IP:
-
-- `/estimate/classical` — 30 req/min
-- `/estimate/quantum` — 10 req/min
-
-Exceeded limits return HTTP 429 with a `Retry-After` header.
-
----
-
-#### 1.4 Add CORS policy ✅
-
-**Problem:** No CORS headers. Browser-based clients (notebook on a different port, demo frontends) were blocked.
-
-**Delivered:** `CORSMiddleware` added to `api/main.py` with restrictive defaults:
-- `allow_origins`: `localhost:8888` (Jupyter), `localhost:3000` (dev frontend), and their `127.0.0.1` equivalents
-- `allow_methods`: GET, POST only
-- `allow_headers`: Content-Type only
-
-Operators expand `allow_origins` for production deployments.
+| Item | Description | Delivered |
+|---|---|---|
+| 2.1 | Structured logging with request IDs | `_JsonFormatter`, `_RequestIDFilter`, `RequestIDMiddleware` (UUID4 per request) |
+| 2.2 | Prometheus metrics endpoint | `prometheus-fastapi-instrumentator`; `/metrics`; `quantum_oracle_calls_total`, `classical_samples_total` counters |
+| 2.3 | Result caching for deterministic simulations | LRU cache 256 (classical, seeded) + 128 (quantum, always) |
+| 2.4 | `/health` liveness vs readiness split | `/health/live`, `/health/ready` (checks qiskit importability) |
+| 2.5 | Expanded test coverage | 34 new tests; `ThresholdPayoff.circuit()`, `LogNormalUncertaintyModel`, `composer_url`, API quantum endpoint, cache behaviour, `/metrics` |
 
 ---
 
-#### 1.5 Add estimation timeout ✅
+### Wave 3 — Portability, Scalability, and Baseline Maintainability 🔧 In progress
 
-**Problem:** `quantum_estimate_async` delegated to `asyncio.to_thread` with no timeout. A slow IQAE run could block a thread indefinitely.
-
-**Delivered:** `asyncio.wait_for(..., timeout=30.0)` wraps the quantum estimation call in the route handler. Timeouts return HTTP 504 with a message suggesting a larger `epsilon`. The constant `_ESTIMATION_TIMEOUT_SECONDS` is annotated for Wave 3 environment config extraction.
-
----
-
-#### 1.6 Add missing quantum engine tests ✅
-
-**Problem:** `tests/test_quantum.py` did not exist. The quantum engine had zero test coverage.
-
-**Delivered:** `tests/test_quantum.py` with 14 tests across three classes:
-
-- `TestQuantumResultDataclass` (2 tests) — field access and frozen enforcement; no qiskit needed.
-- `TestEstimateWithMock` (2 tests) — `ImportError` raised with helpful messages when `qiskit-algorithms` or `qiskit` is absent; uses `sys.modules` patching.
-- `TestEstimateIntegration` (10 tests) — auto-skipped without `qiskit-finance`; covers result type, value range, CI ordering, CI containment, epsilon recording, oracle call count, frozen result, async validity, CI width vs epsilon, and agreement with classical MC.
+**Goal:** Package the system for deployment, add CI, and externalise configuration.
+**Estimated effort for remaining items:** 3–4 days.
 
 ---
 
-### Wave 2 — Observability and Performance
-
-**Goal:** Make the system operable in a shared environment. Operators can see what is happening; repeated requests are fast.
-
-**Estimated effort:** 3–4 days
-
----
-
-#### 2.1 Structured logging with request IDs
-
-**Problem:** Logs are plain text to stderr with no request correlation. Debugging a slow quantum request requires grepping across unrelated log lines.
-
-**Fix:**
-1. Add a FastAPI middleware that generates a `request_id` (UUID4) per request and stores it in a `contextvars.ContextVar`.
-2. Add a custom `logging.Filter` that injects `request_id` into every log record emitted during that request.
-3. Update `configure_logging` to accept a `json: bool` flag that switches the formatter to emit JSON (one object per line) for production log aggregators.
-
-```python
-# quantum_price_inference/_log.py — extended
-import json as _json
-
-class _JsonFormatter(logging.Formatter):
-    def format(self, record: logging.LogRecord) -> str:
-        obj = {
-            "ts": self.formatTime(record, self.datefmt),
-            "level": record.levelname,
-            "logger": record.name,
-            "msg": record.getMessage(),
-        }
-        if hasattr(record, "request_id"):
-            obj["request_id"] = record.request_id
-        return _json.dumps(obj)
-```
-
-**Risk:** Low. Opt-in via `configure_logging(json=True)`.
-
----
-
-#### 2.2 Prometheus metrics endpoint
-
-**Problem:** No metrics. Operators cannot observe request rates, error rates, or estimation latency without parsing logs.
-
-**Fix:** Add `prometheus-fastapi-instrumentator` as a dependency. Expose `/metrics` in `api/main.py`.
-
-```python
-# api/main.py
-from prometheus_fastapi_instrumentator import Instrumentator
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    configure_logging(level="INFO")
-    Instrumentator().instrument(app).expose(app)
-    yield
-```
-
-This provides `http_requests_total`, `http_request_duration_seconds`, and `http_requests_in_progress` out of the box. Add custom counters for `quantum_oracle_calls_total` and `classical_samples_total` in the route handlers.
-
-**Risk:** Low. The instrumentator is a well-maintained library with no breaking changes to the app.
-
----
-
-#### 2.3 Result caching for deterministic simulations
-
-**Problem:** Quantum and classical estimation are deterministic given the same inputs. Every API call re-runs the full simulation.
-
-**Fix:** Add an in-process LRU cache keyed on the full parameter tuple. Use `functools.lru_cache` for the synchronous `estimate` functions.
-
-```python
-# quantum_price_inference/classical.py
-import functools
-
-@functools.lru_cache(maxsize=256)
-def _estimate_cached(
-    mu: float, sigma: float, num_qubits: int, low: float, high: float,
-    breakeven: float, slope: float, max_value: float,
-    n_samples: int, seed: int,
-) -> ClassicalResult:
-    model = NormalUncertaintyModel(mu=mu, sigma=sigma, num_qubits=num_qubits, low=low, high=high)
-    payoff = LinearPayoff(breakeven=breakeven, slope=slope, max_value=max_value)
-    return estimate(model, payoff, n_samples=n_samples, seed=seed)
-```
-
-Note: caching only applies when `seed` is provided (deterministic). Requests without a seed bypass the cache.
-
-For the quantum endpoint, cache by `(mu, sigma, num_qubits, low, high, breakeven, slope, max_value, epsilon, alpha)` — IQAE on a statevector simulator is fully deterministic.
-
-**Risk:** Medium. The cache is in-process and lost on restart. For multi-worker deployments, a shared cache (Redis) is needed (Wave 3). Document the cache behaviour in the API description.
-
----
-
-#### 2.4 `/health` liveness vs readiness split
-
-**Problem:** The single `/health` endpoint conflates liveness (is the process alive?) with readiness (can it serve traffic?). Kubernetes and load balancers need both.
-
-**Fix:** Add `/health/live` (always returns 200 if the process is running) and `/health/ready` (checks that optional dependencies are importable and the thread pool is not saturated).
-
-```python
-@app.get("/health/live", tags=["meta"])
-async def liveness():
-    return {"status": "alive"}
-
-@app.get("/health/ready", tags=["meta"])
-async def readiness():
-    checks = {}
-    try:
-        import qiskit  # noqa: F401
-        checks["qiskit"] = "ok"
-    except ImportError:
-        checks["qiskit"] = "missing"
-    return {"status": "ready", "checks": checks}
-```
-
-**Risk:** Low. Additive endpoint; existing `/health` is preserved for backward compatibility.
-
----
-
-#### 2.5 Expand test coverage for edge cases
-
-**Problem:** Several edge cases are untested:
-- `LogNormalUncertaintyModel` has only 4 tests; `NormalUncertaintyModel` has 8.
-- `ThresholdPayoff.circuit()` is not tested.
-- The API quantum endpoint is not tested (requires `qiskit-finance`; can be skipped with `pytest.importorskip`).
-- No test for the `composer_url` function or the QASM export.
-
-**Fix:** Add targeted tests for each gap. Use `pytest.importorskip("qiskit_finance")` to skip circuit tests when the optional dependency is absent.
-
-```python
-# tests/test_payoff.py — addition
-def test_threshold_circuit_requires_qiskit_finance(threshold_payoff, normal_model):
-    qiskit_finance = pytest.importorskip("qiskit_finance")
-    circuit = threshold_payoff.circuit(normal_model)
-    assert circuit.num_qubits > normal_model.num_qubits  # objective qubit appended
-```
-
-**Risk:** Low. Tests are additive.
-
----
-
-### Wave 3 — Portability, Scalability, and Long-Term Maintainability
-
-**Goal:** Package the system for deployment, add CI, and lay the groundwork for scaling beyond a single process.
-
-**Estimated effort:** 4–5 days
-
----
-
-#### 3.1 Dockerfile and docker-compose ✅
-
-**Problem:** No container packaging. Deployment requires manual environment setup.
-
-**Status:** ✅ Complete — image builds and passes smoke test.
+#### 3.1 Dockerfile and docker-compose ✅ Complete
 
 **Delivered:**
-- `deploy/Dockerfile` — multi-stage build (builder + runtime); Python 3.13-slim-bookworm; uv 0.11.3 pinned; non-root `qpi` user; `curl` HEALTHCHECK on `/health/live`; `QPI_WORKERS` env var controls uvicorn workers
-- `deploy/docker-compose.yml` — full stack (API + Prometheus v3.4.0 + Grafana v12.0.1); `env_file` wired to `deploy/.env`; API healthcheck gates Prometheus startup
-- `deploy/.env.example` — template for local secrets; `deploy/.env` is gitignored
-- `deploy/prometheus.yml` — scrape config with `rule_files` pointing at `alerts.yml`
-- `deploy/prometheus-alerts.yml` — 4 alert rules: `HighErrorRate`, `HighP95Latency`, `ApiDown`, `QuantumEndpointIdle`
-- `deploy/grafana/provisioning/datasources/prometheus.yml` — auto-wires Grafana → Prometheus
-- `deploy/grafana/provisioning/dashboards/dashboards.yml` — loads JSON dashboards from the same directory
-- `deploy/grafana/provisioning/dashboards/qpi-api.json` — pre-built dashboard: 5 stat panels (error rate, p95 latency, req/s, oracle calls/min, MC samples/min) + 4 time-series panels (req/s by endpoint, req/s by status, p50/p95/p99 latency, estimation metrics)
-- `Makefile` — all docker/deploy targets live (`docker-build`, `docker-run`, `docker-stop`, `docker-logs`, `deploy-up`, `deploy-down`, `deploy-logs`, `deploy-ps`); `ci` target chains lint + format-check + test
-- `.gitignore` — `deploy/.env` added
+- `deploy/Dockerfile` — multi-stage, Python 3.13-slim, `uv` pinned, non-root `qpi` user,
+  `curl` HEALTHCHECK on `/health/live`, `QPI_WORKERS` env var
+- `deploy/docker-compose.yml` — API + Prometheus v3.4.0 + Grafana v12.0.1
+- `deploy/.env.example` — config template; `deploy/.env` gitignored
+- `deploy/prometheus.yml` + `deploy/prometheus-alerts.yml` — 4 alert rules
+- `deploy/grafana/provisioning/` — auto-provisioned datasource + 9-panel dashboard
+- `Makefile` — all docker/deploy targets; `ci` target chains lint + format-check + test
 
-**Verified:** `docker build` succeeds; `curl http://localhost:8000/health/live` returns `{"status":"alive"}` from the running container.
+**Verified:** image builds; `curl http://localhost:8000/health/live` returns `{"status":"alive"}`.
 
 ---
 
 #### 3.2 CI pipeline (GitHub Actions)
 
-**Problem:** No automated checks. Regressions are caught only when a developer manually runs `uv run pytest`.
+**Problem:** No automated checks. Regressions are caught only when a developer manually runs
+`uv run pytest`. The `make ci` target exists but is never triggered automatically.
 
 **Fix:** Add `.github/workflows/ci.yml` with three jobs:
 
 1. **lint** — `uv run ruff check . && uv run ruff format --check .`
-2. **type-check** — `uv run mypy quantum_price_inference/ api/`
-3. **test** — `uv run pytest --tb=short` on Python 3.10 and 3.12
+2. **type-check** — `uv run mypy quantum_price_inference/ api/` (after 3.5 adds mypy)
+3. **test** — `uv run pytest --tb=short` matrix: Python 3.10 + 3.12
 
-Trigger on `push` to any branch and on `pull_request` to `main`.
+Trigger on `push` to any branch and `pull_request` to `main`. Cache the uv download and
+`.venv` by hashing `uv.lock` to keep runs under 60 s.
 
 ```yaml
-# .github/workflows/ci.yml (skeleton)
+# .github/workflows/ci.yml
 name: CI
 on: [push, pull_request]
 jobs:
@@ -360,20 +175,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
       - run: uv sync --extra dev --extra notebook
-      - run: uv run pytest --tb=short
       - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pytest --tb=short
 ```
 
-**Risk:** Low. CI is additive and does not affect the runtime.
+**Effort:** 0.5 days. **Risk:** Low — additive, no runtime impact.
 
 ---
 
 #### 3.3 Environment-based configuration
 
-**Problem:** Configuration (log level, CORS origins, rate limits, estimation timeout, cache size) is hardcoded. Changing any value requires a code edit.
+**Problem:** Log level, CORS origins, rate limits, and the 30 s quantum timeout are hardcoded.
+Changing any value requires a code edit and redeploy. The `deploy/.env.example` documents several
+`QPI_*` variables but the application never reads them — `api/main.py` calls
+`configure_logging(level="INFO")` directly, ignoring `QPI_LOG_LEVEL`.
 
-**Fix:** Add a `api/config.py` module using `pydantic-settings` to read configuration from environment variables with sensible defaults.
+**Fix:** Add `api/config.py` using `pydantic-settings`. Replace all hardcoded values.
 
 ```python
 # api/config.py
@@ -382,10 +204,13 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     log_level: str = "INFO"
     log_json: bool = False
-    cors_origins: list[str] = ["http://localhost:8888"]
-    rate_limit_estimation: str = "10/minute"
+    cors_origins: list[str] = ["http://localhost:8888", "http://localhost:3000",
+                                "http://127.0.0.1:8888", "http://127.0.0.1:3000"]
+    classical_rate_limit: str = "30/minute"
+    quantum_rate_limit: str = "10/minute"
     estimation_timeout_seconds: float = 30.0
-    cache_maxsize: int = 256
+    quantum_cache_maxsize: int = 128
+    classical_cache_maxsize: int = 256
 
     class Config:
         env_prefix = "QPI_"
@@ -393,71 +218,256 @@ class Settings(BaseSettings):
 settings = Settings()
 ```
 
-All hardcoded values in `main.py` and route handlers are replaced with `settings.*`. The `_ESTIMATION_TIMEOUT_SECONDS` constant in `api/routes/quantum.py` is the primary target.
+Add `pydantic-settings>=2.0` to the core dependencies in `pyproject.toml`. Replace the
+`_ESTIMATION_TIMEOUT_SECONDS` constant in `api/routes/quantum.py` with `settings.estimation_timeout_seconds`.
+Update `deploy/.env.example` to list every `QPI_*` variable with its default.
 
-**Risk:** Low. Backward-compatible; defaults match current hardcoded values.
+**Effort:** 1 day. **Risk:** Low — backward-compatible; defaults match current hardcoded values.
 
 ---
 
 #### 3.4 Async job pattern for long-running quantum estimation
 
-**Problem:** For small `epsilon` values, IQAE can take tens of seconds. Holding an HTTP connection open for that duration is fragile (client timeouts, load balancer timeouts, poor UX).
+**Problem:** For small `epsilon` values, IQAE can take tens of seconds. Holding an HTTP connection
+open that long is fragile: client timeouts, load balancer idle timeouts, and poor UX in the
+workshop demo (the browser spinner runs until the 30 s timeout fires or the result arrives).
 
-**Fix:** Add an async job pattern:
-- `POST /estimate/quantum/async` returns `202 Accepted` with a `job_id` immediately.
-- `GET /jobs/{job_id}` returns the result when ready, or `{"status": "pending"}` while running.
-- Jobs are stored in an in-process dict initially; replace with Redis for production.
+**Fix:** Add an async job variant alongside the existing synchronous endpoint:
 
-The existing synchronous `POST /estimate/quantum` is preserved unchanged.
+- `POST /estimate/quantum/async` — returns `202 Accepted` with a `job_id` immediately.
+- `GET /jobs/{job_id}` — returns `{"status": "pending"}` or the completed result.
+
+Jobs are stored in an in-process `dict[str, asyncio.Task]` initially (acceptable for single-process
+workshop use; replace with Redis in Wave 5 for multi-worker deployments). The existing synchronous
+`POST /estimate/quantum` is preserved unchanged.
 
 ```python
-# api/routes/quantum.py — async job variant
-import asyncio, uuid
+# api/routes/quantum.py — async job variant (addition)
 _jobs: dict[str, asyncio.Task] = {}
 
-@router.post("/quantum/async", status_code=202)
-async def estimate_quantum_async_job(body: EstimateRequest, ...):
+@router.post("/quantum/async", status_code=202, tags=["quantum"])
+async def estimate_quantum_async_job(request: Request, body: EstimateRequest,
+                                     epsilon: float = Query(default=0.01, ge=0.001, le=0.1),
+                                     alpha: float = Query(default=0.05, ge=0.01, le=0.5)):
     job_id = str(uuid.uuid4())
-    task = asyncio.create_task(
+    model = NormalUncertaintyModel(...)
+    payoff = LinearPayoff(...)
+    _jobs[job_id] = asyncio.create_task(
         quantum_estimate_async(model, payoff, epsilon=epsilon, alpha=alpha)
     )
-    _jobs[job_id] = task
-    return {"job_id": job_id, "status": "pending"}
+    return {"job_id": job_id, "status": "pending", "poll_url": f"/jobs/{job_id}"}
 
-@router.get("/jobs/{job_id}")
+@router.get("/jobs/{job_id}", tags=["jobs"])
 async def get_job(job_id: str):
     task = _jobs.get(job_id)
     if task is None:
         raise HTTPException(404, "Job not found")
     if not task.done():
         return {"status": "pending"}
-    return {"status": "complete", "result": task.result()}
+    if task.exception():
+        raise HTTPException(500, str(task.exception()))
+    result = task.result()
+    del _jobs[job_id]  # clean up on first retrieval
+    return {"status": "complete", "result": result}
 ```
 
-**Risk:** Medium. In-process job store is lost on restart. Acceptable for a demo/workshop context; replace with Redis for production.
+**Effort:** 1.5 days. **Risk:** Medium — in-process job store is lost on restart; documented
+limitation.
 
 ---
 
 #### 3.5 mypy strict mode and type annotations
 
-**Problem:** `mypy` cache exists (`.mypy_cache/3.13/`) but mypy is not in `pyproject.toml` dev dependencies and is not run in any automated check. Several functions use untyped `model` and `payoff` parameters.
+**Problem:** `.mypy_cache/3.13/` exists but `mypy` is not in `pyproject.toml` dev dependencies
+and is not run anywhere. `estimate()` in `classical.py` and `quantum.py` accepts untyped `model`
+and `payoff` parameters — type errors in callers are invisible until runtime.
 
 **Fix:**
 1. Add `mypy>=1.10` to the `dev` extra in `pyproject.toml`.
-2. Add `[tool.mypy]` configuration to `pyproject.toml` with `strict = false` initially, `disallow_untyped_defs = true`.
-3. Annotate `estimate()` parameters in `classical.py` and `quantum.py` with the `UncertaintyModel` and `PayoffFunction` protocols.
-4. Add mypy to the CI pipeline.
+2. Add `[tool.mypy]` to `pyproject.toml`:
+   ```toml
+   [tool.mypy]
+   python_version = "3.10"
+   disallow_untyped_defs = true
+   warn_return_any = true
+   ignore_missing_imports = true
+   ```
+3. Add Protocol types in `quantum_price_inference/` for `UncertaintyModel` and `PayoffFunction`
+   so `estimate()` signatures are typed without importing concrete classes.
+4. Wire `uv run mypy quantum_price_inference/ api/` into the CI job from 3.2.
 
-```toml
-# pyproject.toml
-[tool.mypy]
-python_version = "3.10"
-disallow_untyped_defs = true
-warn_return_any = true
-ignore_missing_imports = true
+**Effort:** 1 day. **Risk:** Low — type errors are surfaced incrementally; fix before gating CI.
+
+---
+
+### Wave 4 — API Feature Completeness ✅ Complete
+
+**Goal:** Close the gap between the library's capabilities and what the API exposes. Make the
+API consistent and versionable.
+
+**Actual effort:** ~1 day. All 4 items delivered; 102 tests passing.
+
+---
+
+#### 4.1 Expose `LogNormalUncertaintyModel` in the API ✅
+
+**Delivered:** Added `distribution_type: Literal["normal", "lognormal"]` discriminator to
+`UncertaintyParams` in `api/schemas.py` (default `"normal"` — backward-compatible). Both route
+handlers dispatch via `_UNCERTAINTY_MODELS = {"normal": NormalUncertaintyModel, "lognormal":
+LogNormalUncertaintyModel}`. The quantum LRU cache key in `quantum.py._estimate_cached` now
+includes `distribution_type` and `payoff_type` to prevent Normal/LogNormal collisions on
+identical numeric parameters. Cache detection uses `type(model).__name__` rather than importing
+concrete classes, keeping `quantum.py` import-clean.
+
+---
+
+#### 4.2 Expose `ThresholdPayoff` in the API ✅
+
+**Delivered:** Added `payoff_type: Literal["linear", "threshold"]` (default `"linear"`) and
+`threshold: float | None` to `PayoffParams`. A `@model_validator(mode="after")` enforces that
+`threshold` is present when `payoff_type == "threshold"` and that `slope > 0` when
+`payoff_type == "linear"`, returning HTTP 422 otherwise. Both route handlers dispatch via
+`if body.payoff.payoff_type == "threshold": ThresholdPayoff(...) else: LinearPayoff(...)`.
+
+---
+
+#### 4.3 Consistent `alpha` / confidence level on the classical endpoint ✅
+
+**Delivered:** Added `alpha: float = Query(default=0.05, ge=0.01, le=0.5)` to
+`POST /estimate/classical`. The hardcoded `1.96` in `_estimate_uncached` was replaced with
+`_z_score(alpha)`, a helper that uses `math.erfinv` (Python ≥ 3.12), falls back to
+`scipy.special.erfinv` (Python 3.10–3.11, scipy already transitively installed by
+qiskit-algorithms), or falls back to an Abramowitz & Stegun rational approximation as a
+last resort. `alpha` is threaded through `_estimate_cached` / `_estimate_uncached` /
+`estimate_async` signatures and included in the LRU cache key.
+
+---
+
+#### 4.4 API versioning prefix ✅
+
+**Delivered:** All estimation routers are now mounted under `/v1` prefix in `api/main.py`.
+Un-prefixed routes are preserved as deprecated aliases (`include_in_schema=False`) so existing
+clients (workshop notebooks, curl examples) continue working without change. The canonical
+OpenAPI schema at `/docs` shows only `/v1` routes.
+
+**Test suite after Wave 4:** 102 passed, 0 failed. Ruff clean on all source files.
+
+---
+
+### Wave 5 — Production Hardening
+
+**Goal:** Secure, scale, and future-proof the system for real-world deployments beyond the
+workshop context.
+
+**Estimated effort:** 5–7 days.
+
+---
+
+#### 5.1 API key authentication
+
+**Problem:** The API has no authentication. Rate limiting constrains request frequency per IP
+but does not identify callers, prevent credential sharing, or allow per-client quota management.
+For a workshop deployment accessible over a network, any attendee who discovers the URL can
+exhaust the quantum endpoint for other attendees (10 req/min per IP is easily circumvented
+from multiple machines).
+
+**Fix:** Add optional API key authentication via an `X-API-Key` header:
+
+```python
+# api/auth.py
+from fastapi import Header, HTTPException, Security
+from fastapi.security import APIKeyHeader
+
+_API_KEY_HEADER = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+def verify_api_key(api_key: str | None = Security(_API_KEY_HEADER)) -> str | None:
+    if settings.api_key is None:
+        return None  # auth disabled; open access for local dev
+    if api_key != settings.api_key:
+        raise HTTPException(401, "Invalid or missing X-API-Key")
+    return api_key
 ```
 
-**Risk:** Low. Type errors are surfaced as warnings initially; fix incrementally.
+Add `api_key: str | None = None` to `Settings` in `api/config.py` (3.3 prerequisite). When
+`QPI_API_KEY` is unset, authentication is disabled (preserving existing local-dev behaviour).
+When set, all `/estimate/*` routes require the header.
+
+**Effort:** 1 day. **Risk:** Low — opt-in via env var; disabled by default.
+
+---
+
+#### 5.2 Redis-backed shared cache
+
+**Problem:** The in-process LRU caches in `classical.py` and `quantum.py` fragment across
+workers. With `QPI_WORKERS=4`, the same parameter tuple may be computed 4 times — once per
+worker — before any worker warms its cache. The `deploy/docker-compose.yml` uses the default
+single-worker configuration, masking this issue, but the `Dockerfile` exposes `QPI_WORKERS`.
+
+**Fix:** Extract the cache into a pluggable backend:
+
+1. Add an abstract `CacheBackend` protocol with `get(key: str)` and `set(key: str, value)`.
+2. Implement `LRUBackend` (current behaviour) and `RedisBackend` (using `redis-py` async client).
+3. Select backend in `api/config.py`:
+   ```python
+   redis_url: str | None = None  # QPI_REDIS_URL; if None, use in-process LRU
+   ```
+4. Add `redis[asyncio]>=5.0` to a new `cache` optional extra.
+5. Update `deploy/docker-compose.yml` to include a `redis:7-alpine` service when
+   `QPI_REDIS_URL` is set.
+
+This change is scoped to the API layer — `classical.py` and `quantum.py` keep their
+in-process LRU caches for notebook and CLI use.
+
+**Effort:** 2 days. **Risk:** Medium — introduces Redis as an optional infrastructure dependency;
+existing deployments are unaffected (default `LRUBackend`).
+
+---
+
+#### 5.3 Qiskit 3.0 migration
+
+**Problem:** Multiple classes used in `payoff.py` are deprecated in Qiskit 2.x and will be
+removed in Qiskit 3.0. The `uv.lock` pins current versions, but the migration window is open
+now. Delaying until Qiskit 3.0 is released creates a forced breaking change with no runway.
+
+Affected symbols (from `payoff.py`):
+- `LinearAmplitudeFunction` → use `qiskit_finance.circuit.library.LinearAmplitudeFunction` v2
+  API or a hand-rolled `RealAmplitudeEstimation` circuit.
+- `BlueprintCircuit` → use `QuantumCircuit` directly.
+- `MCXGate` → use `MCXGrayCode` or the standard `MCXGate` via `qiskit.circuit.library`.
+- `GroverOperator` → migrate to `qiskit.circuit.library.GroverOperator` (moved, not removed).
+
+**Fix:**
+1. Run `python -W error::DeprecationWarning -m pytest` and capture the full deprecation report.
+2. For each warning, identify the replacement in the Qiskit 3.0 migration guide.
+3. Update `payoff.py` and the relevant integration tests.
+4. Pin `qiskit>=2.0,<3.0` in `pyproject.toml` during migration; remove the upper bound once
+   all tests pass on 3.0.
+5. Add a CI matrix entry for `qiskit==2.*` and `qiskit==3.*` after the migration.
+
+**Effort:** 2–3 days (uncertainty: depends on `qiskit-finance` migration completeness).
+**Risk:** High — `qiskit-finance` may not have a Qiskit 3.0-compatible release yet; track
+the `qiskit-finance` issue tracker and plan a fallback (hand-rolled circuits).
+
+---
+
+#### 5.4 Kubernetes manifests
+
+**Problem:** Only docker-compose is provided. Teams deploying on Kubernetes (EKS, GKE, AKS)
+must write their own manifests. Without an HPA, the system cannot scale horizontally in
+response to workshop traffic spikes; without a `ConfigMap`, the `QPI_*` environment variables
+have no declarative home.
+
+**Fix:** Add `deploy/k8s/` with:
+
+- `deployment.yaml` — 2-replica `Deployment` with `QPI_WORKERS=1` (let HPA handle parallelism
+  at the pod level rather than within a pod), `livenessProbe` on `/health/live`,
+  `readinessProbe` on `/health/ready`.
+- `service.yaml` — `ClusterIP` Service, port 8000.
+- `configmap.yaml` — `QPI_LOG_LEVEL`, `QPI_LOG_JSON=true`, `QPI_CORS_ORIGINS` for prod.
+- `hpa.yaml` — `HorizontalPodAutoscaler` targeting 70 % CPU, min 2 / max 10 replicas.
+- `ingress.yaml` — annotation-driven TLS termination (cert-manager).
+
+**Effort:** 1.5 days. **Risk:** Low — additive artefacts; no runtime changes.
 
 ---
 
@@ -465,47 +475,58 @@ ignore_missing_imports = true
 
 ```
 Wave 1 (correctness/security) ✅ Complete
-  ├── 1.1 (import fix)          ✅
-  ├── 1.2 (input bounds)        ✅
-  ├── 1.3 (rate limiting)       ✅
-  ├── 1.4 (CORS)                ✅
-  ├── 1.5 (timeout)             ✅
-  └── 1.6 (quantum tests)       ✅
+  ├── 1.1–1.6  ✅
 
-Wave 2 (observability/performance) — ready to start
-  ├── 2.1 (structured logging)  — no dependencies
-  ├── 2.2 (metrics)             — requires 2.1 (request IDs enrich metrics)
-  ├── 2.3 (caching)             — requires 1.2 ✅ (bounded inputs make cache keys safe)
-  ├── 2.4 (health split)        — no dependencies
-  └── 2.5 (test coverage)       — requires 1.6 ✅ (quantum tests establish baseline)
+Wave 2 (observability/performance) ✅ Complete
+  ├── 2.1–2.5  ✅
 
-Wave 3 (portability/scalability) — blocked on Wave 1 ✅ (now unblocked)
-  ├── 3.1 (Docker)              — requires Wave 1 ✅; also benefits from 2.4 (health/live)
-  ├── 3.2 (CI)                  — requires 1.6 ✅ + 2.5
-  ├── 3.3 (config)              — requires 1.3 ✅ + 1.5 ✅ (values to externalise exist)
-  ├── 3.4 (async jobs)          — requires 2.2 (metrics to observe job queue depth)
-  └── 3.5 (mypy)                — requires 3.2 (CI to enforce it)
+Wave 3 (portability/scalability) — 3.1 done; 3.2–3.5 pending
+  ├── 3.1 (Docker)         ✅ — gates 3.2 CI (image build step)
+  ├── 3.2 (CI)             — requires 1.6 ✅ + 2.5 ✅; gates 3.5 (mypy in CI)
+  ├── 3.3 (env config)     — requires 1.3 ✅ + 1.5 ✅; gates 5.1 (api_key setting)
+  ├── 3.4 (async jobs)     — requires 2.2 ✅ (metrics for job queue depth)
+  └── 3.5 (mypy)           — requires 3.2 (CI to enforce); gates 4.x (typed dispatch)
+
+Wave 4 (API feature completeness) — blocked on 3.5 for type safety
+  ├── 4.1 (LogNormal API)  — requires 3.5 (typed dispatch); gates cache key update
+  ├── 4.2 (ThresholdPayoff API) — requires 4.1 (discriminator pattern established)
+  ├── 4.3 (classical alpha) — independent; no blockers
+  └── 4.4 (API versioning) — requires 4.1 + 4.2 (stable schema before versioning)
+
+Wave 5 (production hardening) — blocked on Wave 3 completion
+  ├── 5.1 (API key auth)   — requires 3.3 (settings module)
+  ├── 5.2 (Redis cache)    — requires 3.3 (redis_url setting) + 3.4 (multi-worker awareness)
+  ├── 5.3 (Qiskit 3.0)     — independent; time-sensitive (Qiskit 3.0 release date)
+  └── 5.4 (K8s manifests)  — requires 3.1 ✅ + 3.3 (ConfigMap values)
 ```
+
+**Critical path to production:** 3.3 → 5.1 → 5.2 (security + multi-worker cache).
+**Critical path for maintenance:** 3.2 → 3.5 → 5.3 (CI + mypy + Qiskit 3.0 migration).
 
 ---
 
 ## Follow-up Metrics
 
-| Metric | Baseline | After Wave 1 | Wave 2 Target | Wave 3 Target |
-|---|---|---|---|---|
-| Test count | 42 | **56** ✅ | 70+ | 80+ |
-| Test coverage (core library) | ~70% (no quantum tests) | **~85%** ✅ | **90%** ✅ | 95% |
-| Import-safe without extras | No (`composer.py`) | **Yes** ✅ | Yes | Yes |
-| API input validation errors return 422 | Partial | **Full** ✅ | Full | Full |
-| Rate-limited 429 responses visible | No | **Yes** ✅ | Yes | Yes |
-| Estimation timeout enforced | No | **Yes (30 s)** ✅ | Yes | Yes (configurable) |
-| CORS headers on responses | No | **Yes** ✅ | Yes | Yes |
-| p95 quantum latency (epsilon=0.01) | Unmeasured | Unmeasured | **Measured + cached** ✅ | Measured + cached |
-| Structured log lines per request | 0 | 0 | **≥3 with request_id** ✅ | ≥3 with request_id |
-| Prometheus scrape endpoint | No | No | **Yes** ✅ | Yes |
-| Docker image builds cleanly | No | No | No | **Yes** ✅ |
-| CI passes on PR | No | No | No | Yes |
-| mypy errors in core library | Unknown | Unknown | Unknown | 0 |
+| Metric | Baseline | Wave 1 | Wave 2 | Wave 3 | Wave 4 | Wave 5 |
+|---|---|---|---|---|---|---|
+| Test count | 42 | **56** ✅ | **90** ✅ | 100+ | **102** ✅ | 115+ |
+| Test coverage (core library) | ~70 % | **~85 %** ✅ | **~90 %** ✅ | 92 % | **~92 %** ✅ | 95 % |
+| Import-safe without extras | No | **Yes** ✅ | Yes | Yes | Yes | Yes |
+| API input validation (422) | Partial | **Full** ✅ | Full | Full | Full | Full |
+| Rate-limited 429 responses | No | **Yes** ✅ | Yes | Yes | Yes | Yes |
+| Estimation timeout enforced | No | **Yes (30 s)** ✅ | Yes | **Configurable** | Configurable | Configurable |
+| Structured log lines per request | 0 | 0 | **≥ 3 with request_id** ✅ | ≥ 3 | ≥ 3 | ≥ 3 |
+| Prometheus scrape endpoint | No | No | **Yes** ✅ | Yes | Yes + tracing | Yes |
+| Docker image builds cleanly | No | No | No | **Yes** ✅ | Yes | Yes |
+| CI passes on PR (lint + test) | No | No | No | **Yes** | Yes | Yes |
+| mypy errors in core library | Unknown | Unknown | Unknown | **0** | 0 | 0 |
+| LogNormal + ThresholdPayoff via API | No | No | No | No | **Yes** ✅ | Yes |
+| Consistent `alpha` on both endpoints | No | No | No | No | **Yes** ✅ | Yes |
+| Authentication (API key) | No | No | No | No | No | **Yes** |
+| Shared cache across workers | No | No | No | No | No | **Yes (Redis)** |
+| Qiskit 3.0 compatibility | Unknown | Unknown | Unknown | Unknown | Unknown | **Yes** |
+| Kubernetes manifests | No | No | No | No | No | **Yes** |
+| p95 quantum latency (ε=0.01) cached | Unmeasured | Unmeasured | **Measured** ✅ | Measured | Measured | Measured |
 
 ---
 
@@ -513,21 +534,31 @@ Wave 3 (portability/scalability) — blocked on Wave 1 ✅ (now unblocked)
 
 | Risk | Likelihood | Impact | Status | Mitigation |
 |---|---|---|---|---|
-| `qiskit-algorithms` API changes break `quantum.py` | Medium | High | Open | Pin exact versions in `uv.lock`; integration tests in 1.6 ✅ now catch regressions; monitor qiskit release notes. |
-| `StatevectorSampler` removed or renamed in future Qiskit | Medium | High | Open | Abstract the sampler behind a factory function so it can be swapped without touching `quantum.py`. |
-| LRU cache grows unbounded in long-running process | Low | Medium | Open (Wave 2.3) | Set `maxsize=256`; add a `/admin/cache/clear` endpoint protected by a secret header. |
-| Rate limiter blocks legitimate workshop participants | Low | Medium | Mitigated ✅ | Per-IP limits with generous burst (30/min classical, 10/min quantum); document how to whitelist IPs for workshop environments. |
-| Async job store lost on restart (Wave 3.4) | High | Low (demo context) | Open (Wave 3.4) | Document the limitation clearly; provide a Redis-backed store as a follow-up. |
-| `ThresholdPayoff.circuit()` approximation error | Medium | Medium | Open (Wave 2.5) | The steep-ramp approximation introduces error proportional to `1 / (2^num_qubits)`. Document and add a test verifying output is within `2 * step` of the true threshold. |
-| `configure_logging` replaces all root handlers | Low | Low | Open | Add a `replace_handlers: bool = True` parameter so callers can opt out (useful when integrating with frameworks that manage their own handlers). |
-| Qiskit 2.x deprecation warnings in test output | High | Low | Open | `LinearAmplitudeFunction`, `BlueprintCircuit`, `GroverOperator`, and `MCXGate` are deprecated in Qiskit 2.x and will be removed in 3.0. Track the Qiskit 3.0 migration guide and update `payoff.py` before the removal. |
+| `qiskit-algorithms` API changes break `quantum.py` | Medium | High | Open | Pin exact versions in `uv.lock`; integration tests in 1.6 ✅ catch regressions. Abstract `StatevectorSampler` behind a factory function (Wave 3.5 typing work). |
+| `LinearAmplitudeFunction` / `MCXGate` removed in Qiskit 3.0 | High | High | **Time-sensitive** | Start 5.3 migration now; `qiskit-finance` may not be Qiskit-3.0-ready — prepare hand-rolled circuit fallback. |
+| LRU cache grows unbounded in long-running single-worker process | Low | Medium | Mitigated — maxsize set ✅ | Add `/admin/cache/clear` endpoint protected by `X-Admin-Key` header (Wave 5.1 builds the auth infrastructure). |
+| Multi-worker cache fragmentation (`QPI_WORKERS > 1`) | High | Medium | Open (Wave 5.2) | Document that `QPI_WORKERS > 1` defeats in-process caching; mitigate with Redis backend (5.2). |
+| Rate limiter blocks legitimate workshop participants sharing an IP | Low | Medium | Mitigated ✅ | Per-IP limits with generous burst; document how to whitelist IPs for workshop environments. After 5.1, rate-limit per API key instead of per IP. |
+| Async job store (3.4) lost on restart | High | Low (demo context) | Open (Wave 3.4) | Document clearly; provide Redis-backed store in Wave 5.2. |
+| Classical CI hardcoded at 95 % inconsistent with quantum | Medium | Low | Open (Wave 4.3) | Fix in 4.3; until then, document that classical CI is always 95 %. |
+| API schema changes break distributed notebook copies | Medium | Medium | Open (Wave 4.4) | Introduce `/v1` prefix (4.4) before any breaking schema change (4.1, 4.2). |
+| `configure_logging` replaces all root handlers | Low | Low | Open | Add `replace_handlers: bool = True` param so callers can opt out (useful when integrating with logging frameworks). |
+| No request body size limit | Low | Low | Open | FastAPI/uvicorn default is 1 MB; document and consider lowering to 64 KB for estimation endpoints (bodies are tiny). |
 
 ---
 
 ## Conclusion
 
-The project has a strong conceptual foundation and a clean architecture. Waves 1 and 2 are complete, and Wave 3.1 (Docker + Compose + Makefile) is done and verified.
+The project has reached a strong operational baseline: it is secure, observable, and
+containerised. The 90-test suite provides confidence for ongoing changes.
 
-The system is now safe to expose beyond localhost (Wave 1), fully observable in a shared environment (Wave 2), and deployable as a container with a pre-built Grafana dashboard (Wave 3.1).
+**Recommended next steps in priority order:**
 
-The remaining Wave 3 items (3.2 CI, 3.3 env config, 3.4 async jobs, 3.5 mypy) make the system maintainable and scalable over time. The CI pipeline (3.2) is the highest-leverage next step — once in place, it prevents regressions from all previous waves automatically.
+1. **3.2 CI** — highest leverage; prevents regressions from all previous waves automatically.
+2. **3.3 Environment config** — unblocks 5.1 (auth) and makes the deployed container actually
+   respect `QPI_*` variables that are already documented but ignored.
+3. **5.3 Qiskit 3.0 migration** — time-sensitive; the deprecation window is open and the
+   removal date is fixed by the Qiskit upstream release schedule.
+4. **4.1 + 4.2** (LogNormal + ThresholdPayoff in API) — closes the gap between library
+   capability and API exposure; high workshop value, low risk.
+5. **5.1 API key auth** — required before any internet-accessible deployment.

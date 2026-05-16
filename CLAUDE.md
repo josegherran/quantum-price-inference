@@ -31,7 +31,7 @@ uv run marimo run notebook/01_price_estimation_techniques_app.py
 
 Three delivery interfaces share one core library:
 
-```
+```file structure
 quantum_price_inference/   # pure-Python library — the only place business logic lives
 api/                       # FastAPI service consuming the library
 notebook/                  # Jupyter + marimo apps consuming the library
