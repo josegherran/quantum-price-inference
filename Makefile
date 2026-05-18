@@ -82,7 +82,7 @@ api: ## Start the FastAPI development server with auto-reload
 	uv run uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 
 notebook: ## Launch Jupyter notebook (requires --extra notebook)
-	uv run jupyter notebook notebook/quantum_price_inference.ipynb
+	uv run jupyter notebook notebook/01_price_estimation_techniques.ipynb
 
 # ---------------------------------------------------------------------------
 # Docker — single container (API only)
